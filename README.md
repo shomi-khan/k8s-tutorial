@@ -32,7 +32,7 @@ YAML and commands are tools for expressing and observing Kubernetes behavior, no
 
 | Chapter | Topic | What We'll Learn |
 |---|---|---|
-| 00 | Kubernetes Foundation | Application operations as they grow; containers; why orchestration is needed; what Kubernetes is and isn't. |
+| 00 | [Kubernetes Foundation](chapters/00-kubernetes-foundation/README.md) | Application operations as they grow; containers; why orchestration is needed; what Kubernetes is and isn't. |
 | 01 | Kubernetes Architecture | Cluster, nodes, control plane, worker nodes, major components, and how they coordinate. |
 | 02 | Pods | Why Pods exist; structure, lifecycle, networking basics, multi-container patterns, and limitations. |
 | 03 | Workloads: Deployment and ReplicaSet | Desired replicas, declarative management, rollouts, scaling, self-healing, and ReplicaSet's role. |
