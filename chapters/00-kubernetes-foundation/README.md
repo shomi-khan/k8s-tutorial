@@ -221,28 +221,13 @@ Kubernetes এই management problem-কে একটি সাধারণ API,
 
 ## 6. Kubernetes আসলে কী করে?
 
-Kubernetes একটি open-source platform, যা containerized application deploy, manage, scale এবং তাদের desired state বজায় রাখতে সাহায্য করে।
+Kubernetes একটি open-source platform, যা containerized application deploy, manage ও scale করতে সাহায্য করে। এর একটি মৌলিক বৈশিষ্ট্য হলো: তুমি শুধু কোনো কাজের command দাও না, বরং application-কে কোন অবস্থায় রাখতে চাও সেটিও declare করো।
 
-Kubernetes-কে শুধু “container চালানোর tool” হিসেবে ভাবলে এর মূল ধারণাটি মিস হবে।
-
-তুমি Kubernetes-কে বলতে পারো:
+যেমন:
 
 > “আমার application-এর 3টি replica চলতে থাকা দরকার।”
 
-Kubernetes-এর বিভিন্ন component মিলে চেষ্টা করে এই চাওয়াকে বাস্তব অবস্থার সঙ্গে মিলিয়ে রাখতে।
-
-```mermaid
-flowchart TD
-    D[Developer declares desired state:<br/>3 application replicas] --> K[Kubernetes control system]
-    K --> O[Observe actual cluster state]
-    O --> C{Actual state matches<br/>desired state?}
-    C -->|No| A[Take corrective action]
-    A --> O
-    C -->|Yes| W[Continue monitoring]
-    W --> O
-```
-
-এই loop-টি খুব গুরুত্বপূর্ণ। Kubernetes একবার command চালিয়ে চলে যায় না। Cluster-এর অবস্থা পর্যবেক্ষণ করে এবং প্রয়োজন হলে desired state-এর দিকে ফেরানোর চেষ্টা করে।
+Kubernetes-এর বিভিন্ন component মিলে সেই চাহিদা পূরণের চেষ্টা করে। এই ধারণাটির নাম **desired state**। Section 8-এ আমরা desired state, actual state এবং তাদের মধ্যে পার্থক্য তৈরি হলে Kubernetes কীভাবে প্রতিক্রিয়া জানায়, তা আলাদা করে দেখব।
 
 উদাহরণ:
 
@@ -412,10 +397,12 @@ Cluster Autoscaler cluster-এর অবস্থা দেখে। কিছ�
 
 ```mermaid
 flowchart TD
-    H[HPA: API-র 8টি Pod দরকার] --> P[8টি Pod তৈরি করার অনুরোধ]
+    H[HPA: desired replicas = 8] --> D[Deployment: desired replicas = 8]
+    D --> RS[ReplicaSet creates required Pods]
+    RS --> P[New Pods awaiting placement]
     P --> S[Kubernetes Scheduler]
     S -->|5টি Pod schedule হয়| N[Existing EC2 worker nodes]
-    S -->|3টি Pod Pending: জায়গা নেই| PA[Pending Pods]
+    S -->|3টি Pod unschedulable| PA[Pending Pods]
     PA --> CA[Cluster Autoscaler]
     CA --> ASG[AWS Auto Scaling Group capacity বাড়ায়]
     ASG --> EC2[নতুন EC2 instance চালু হয়]
@@ -469,20 +456,22 @@ sequenceDiagram
     participant U as Users
     participant H as HPA
     participant D as Deployment
+    participant RS as ReplicaSet
     participant S as Scheduler
     participant CA as Cluster Autoscaler
     participant A as AWS ASG
     participant N as New EC2 Node
 
-    U->>H: Traffic / load increases
-    H->>D: Desired replicas = 8
-    D->>S: New Pods need placement
-    S->>S: Check available node capacity
-    S-->>CA: Some Pods cannot be scheduled
-    CA->>A: Increase node group capacity
+    U->>H: CPU metric indicates higher load
+    H->>D: Update desired replicas to 8
+    D->>RS: Desired Pod count becomes 8
+    RS->>S: Pods are created and await placement
+    S->>S: Evaluate eligible Nodes and capacity
+    S-->>CA: Some Pods are unschedulable
+    CA->>A: Increase configured node group capacity
     A->>N: Launch EC2 instance
-    N-->>S: Node joins the cluster
-    S->>S: Assign pending Pods to the new node
+    N-->>S: New Node registers in the cluster
+    S->>S: Assign eligible pending Pods to the new Node
 ```
 
 Traffic পরে কমে গেলে HPA Pod replica কমাতে পারে। Node autoscaler-ও খালি বা কম ব্যবহৃত Node সরানোর চেষ্টা করতে পারে, যদি configuration ও safety condition তা অনুমোদন করে। ফলে application-এর Pod সংখ্যা এবং EC2 machine-এর সংখ্যা দুইটি আলাদা policy অনুযায়ী বাড়ে বা কমে।
@@ -527,26 +516,26 @@ Kubernetes-এর মূল্য বাড়ে যখন অনেক containeri
 
 ## 8. Kubernetes-এর মূল mental model: Desired State বনাম Actual State
 
-Kubernetes বোঝার জন্য এই পার্থক্যটি মনে রাখো:
+Section 6-এ আমরা desired state-এর সঙ্গে পরিচিত হয়েছি। এবার ধারণাটিকে একটু নির্দিষ্ট করে দেখি।
 
-- **Desired state:** তুমি system-কে কী অবস্থায় রাখতে চাও।
-- **Actual state:** system এখন বাস্তবে কী অবস্থায় আছে।
+- **Desired state:** তুমি Kubernetes-কে যে কাঙ্ক্ষিত অবস্থা declare করো। যেমন, একটি Deployment-এর `replicas: 3`।
+- **Actual state:** Cluster-এ এই মুহূর্তে বাস্তবে যতগুলো Pod আছে এবং সেগুলোর অবস্থা কী।
 
-ধরো তুমি 3টি replica চাও।
+ধরো, Deployment-এ 3টি replica চাওয়া হয়েছে, কিন্তু বর্তমানে মাত্র 2টি Pod আছে। Desired state ও actual state-এর মধ্যে mismatch তৈরি হয়েছে।
 
 ```mermaid
 flowchart TD
-    DS[Desired state: 3 replicas]
-    AS[Actual state: 2 replicas]
-    DS --> C[Controller observes difference]
-    AS --> C
-    C --> R[Create replacement Pod]
-    R --> AS2[Actual state eventually: 3 replicas]
+    D[Deployment desired replicas: 3] --> RS[ReplicaSet observes desired count]
+    A[Actual matching Pods: 2] --> RS
+    RS -->|Difference: 1 Pod| P[Create 1 replacement Pod]
+    P --> S[Scheduler assigns a suitable Node]
+    S --> K[Kubelet starts the Pod containers]
+    K --> N[Actual state moves toward 3 Pods]
 ```
 
-Kubernetes-এর control loops বারবার state পর্যবেক্ষণ করে এবং mismatch থাকলে corrective action নেওয়ার চেষ্টা করে। এই approach-কে reconciliation বলা হয়।
+এই diagram-এ একটি গুরুত্বপূর্ণ বিষয় খেয়াল করো: Deployment-এর desired replica count ReplicaSet-এর মাধ্যমে বাস্তবায়িত হয়। Scheduler নিজে Pod তৈরি করে না; সে তৈরি হওয়া, এখনো Node-এ assign না হওয়া Pod-এর জন্য উপযুক্ত Node নির্বাচন করে।
 
-এটি শুধু “একটি command চালাও” পদ্ধতি নয়। এটি “এই অবস্থাটি বজায় রাখো” পদ্ধতি।
+**Reconciliation** হলো এই পার্থক্য পর্যবেক্ষণ করে প্রয়োজনীয় corrective action নেওয়া এবং আবার state পরীক্ষা করার ধারাবাহিক প্রক্রিয়া। এটি একবারের command নয়; controller-গুলো বারবার কাজটি করে। কোনো action নেওয়া মানেই desired state সঙ্গে সঙ্গে পাওয়া যাবে এমন নয়। পর্যাপ্ত resource বা উপযুক্ত Node না থাকলে actual state কিছু সময়ের জন্য desired state থেকে আলাদা থাকতে পারে।
 
 Chapter 10-এ আমরা reconciliation loop, controller, API server ও watch-এর ভিতরের mechanics বিস্তারিত দেখব। এখানে শুধু mental model-টি মনে রাখো।
 
