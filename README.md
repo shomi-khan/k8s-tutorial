@@ -34,7 +34,7 @@ YAML ও command হলো Kubernetes-এর behavior প্রকাশ ও প
 | Chapter | বিষয় | কী শিখব |
 |---|---|---|
 | 00 | [Kubernetes-এর ভিত্তি](chapters/00-kubernetes-foundation/README.md) | Application বড় হওয়ার সঙ্গে সঙ্গে পরিচালনার সমস্যা; container; orchestration কেন প্রয়োজন; Kubernetes কী এবং কী নয়। |
-| 01 | Kubernetes Architecture | Cluster, node, control plane, worker node, প্রধান component এবং তারা কীভাবে একসঙ্গে কাজ করে। |
+| 01 | [Kubernetes Architecture](chapters/01-kubernetes-architecture/README.md) | Cluster, node, control plane, worker node, প্রধান component এবং তারা কীভাবে একসঙ্গে কাজ করে। |
 | 02 | Pods | Pod কেন আছে; গঠন, lifecycle, networking-এর ভিত্তি, multi-container pattern এবং সীমাবদ্ধতা। |
 | 03 | Workloads: Deployment ও ReplicaSet | Desired replica, declarative management, rollout, scaling, self-healing এবং ReplicaSet-এর ভূমিকা। |
 | 04 | Kubernetes Networking | Pod networking, Service, selector, endpoint, DNS, ClusterIP, NodePort এবং Ingress/Gateway-এর পরিচিতি। |

@@ -673,7 +673,7 @@ Replica বাড়ালেই EC2 বাড়াতে হবে এমন নয়�
 
 ## Next Chapter
 
-**Chapter 01: Kubernetes Architecture**
+**[Chapter 01: Kubernetes Architecture](../01-kubernetes-architecture/README.md)**
 
 পরবর্তী chapter-এ Kubernetes Cluster, Control Plane, Worker Node, API Server, Scheduler, Controller Manager এবং kubelet-এর ভূমিকা বুঝব। Chapter 00-তে যে “কে এই কাজগুলো করবে?” প্রশ্নগুলো তুলেছি, Architecture chapter-এ সেগুলোর উত্তর খুঁজে শুরু করব।
 
