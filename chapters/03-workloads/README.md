@@ -62,7 +62,7 @@ flowchart TD
   RS --> P3[Pod 3]
   P2 -. deleted .-> GAP[Current: 2]
   RS --> NEW[Create replacement Pod]
-  NEW --> P4[Pod 3 restored]
+  NEW --> P4[Replacement Pod]
 ```
 
 ReplicaSet-এর selector অবশ্যই Pod template-এর labels-এর সঙ্গে সামঞ্জস্যপূর্ণ হতে হবে। Selector overlap করলে controller-গুলোর মধ্যে ownership conflict হতে পারে। ReplicaSet সাধারণত সরাসরি হাতে manage করার resource নয়; Deployment তার উপরে update management যোগ করে।
@@ -294,7 +294,7 @@ Lab-এ Deployment create, ReplicaSet/Pod hierarchy observe, Pod delete কর�
 
 ## Next Chapter
 
-**[Chapter 04: Kubernetes Networking](../04-kubernetes-networking/README.md)**
+**Chapter 04: Kubernetes Networking**
 
 এখন একাধিক Pod চালানো ও update করা শিখেছি। কিন্তু Pod-এর IP disposable এবং replica বদলাতে পারে। পরবর্তী chapter-এ Service কীভাবে পরিবর্তনশীল Pod-এর সামনে stable network endpoint তৈরি করে তা দেখব।
 
