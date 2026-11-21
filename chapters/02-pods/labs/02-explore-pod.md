@@ -67,6 +67,7 @@ kubectl get pod pod-explorer -o yaml
 kubectl get pod pod-explorer -o jsonpath='{.metadata.labels}{"\n"}'
 kubectl get pod pod-explorer -o jsonpath='{.spec.containers[*].name}{"\n"}'
 kubectl get pod pod-explorer -o jsonpath='{.status.phase}{"\n"}'
+kubectl get pod pod-explorer -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}{"\n"}'
 ```
 
 Output থেকে metadata, desired spec এবং observed status identify করো।
