@@ -391,7 +391,11 @@ ASG-এর কাজ EC2 instance fleet পরিচালনা করা। Ku
 
 ধরো, EKS cluster-এ worker node-গুলো একটি EC2 Auto Scaling Group বা EKS Managed Node Group দিয়ে তৈরি করা হয়েছে।
 
-Cluster Autoscaler cluster-এর অবস্থা দেখে। কিছু Pod scheduling-এর জন্য unschedulable থাকলে এটি যাচাই করে configured node group-এর উপযুক্ত Node যোগ করলে Pod-গুলো schedule করা সম্ভব হবে কি না। সম্ভব হলে এটি উপযুক্ত node group-এর size বাড়ানোর জন্য AWS-এর সঙ্গে কাজ করে। Node group-এর পেছনে ASG থাকলে ASG নতুন EC2 instance চালু করে। এটি কাজ করার জন্য node group discovery, IAM permission, scaling limits এবং সঠিক cluster configuration প্রয়োজন।
+Cluster Autoscaler cluster-এর অবস্থা দেখে। কোনো Pod unschedulable থাকলে এটি যাচাই করে configured node group-এ উপযুক্ত Node যোগ করলে Pod-টি schedule করা সম্ভব হবে কি না।
+
+সম্ভব হলে এটি AWS-এর মাধ্যমে node group-এর size বাড়ানোর চেষ্টা করে। Node group-এর পেছনে ASG থাকলে ASG নতুন EC2 instance চালু করে।
+
+এটি কাজ করার জন্য node group discovery, IAM permission, scaling limits এবং সঠিক cluster configuration প্রয়োজন।
 
 নতুন EC2 instance Kubernetes cluster-এ worker node হিসেবে যুক্ত হলে Scheduler আবার Pending Pod-গুলোর জন্য জায়গা খুঁজতে পারে।
 
@@ -423,7 +427,9 @@ flowchart TD
 
 #### Karpenter কী?
 
-Karpenter আরেকটি node autoscaling/provisioning tool। এটিও Pending Pod-এর resource requirement দেখে নতুন worker node দরকার কিনা নির্ধারণ করতে পারে। তবে Cluster Autoscaler-এর মতো আগে থেকে নির্ধারিত ASG-এর desired capacity বাড়ানোর পথেই শুধু কাজ করে না। AWS-এ Karpenter প্রয়োজন অনুযায়ী EC2 instance provision করার জন্য AWS API ব্যবহার করতে পারে।
+Karpenter আরেকটি node autoscaling/provisioning tool। এটিও Pending Pod-এর resource requirement দেখে নতুন worker Node দরকার কি না নির্ধারণ করতে পারে।
+
+তবে Cluster Autoscaler-এর মতো শুধু আগে থেকে নির্ধারিত ASG-এর desired capacity বাড়ানোর পথে সীমাবদ্ধ নয়। AWS-এ Karpenter প্রয়োজন অনুযায়ী EC2 instance provision করতে AWS API ব্যবহার করতে পারে।
 
 এই chapter-এর জন্য শুধু পার্থক্যটি মনে রাখো:
 
@@ -490,7 +496,9 @@ sequenceDiagram
     K->>K: Start the Pod containers
 ```
 
-Traffic পরে কমে গেলে HPA Pod replica কমাতে পারে। Node autoscaler-ও খালি বা কম ব্যবহৃত Node সরানোর চেষ্টা করতে পারে, যদি configuration ও safety condition তা অনুমোদন করে। ফলে application-এর Pod সংখ্যা এবং EC2 machine-এর সংখ্যা দুইটি আলাদা policy অনুযায়ী বাড়ে বা কমে।
+Traffic কমে গেলে HPA Pod replica কমাতে পারে। Node autoscaler-ও configuration ও safety condition অনুমোদন করলে খালি বা কম ব্যবহৃত Node সরানোর চেষ্টা করতে পারে।
+
+অর্থাৎ, application-এর Pod সংখ্যা এবং EC2 machine-এর সংখ্যা দুটি আলাদা policy অনুযায়ী বাড়ে বা কমে।
 
 এই উদাহরণে HPA, Deployment, Scheduler, kubelet, Cluster Autoscaler এবং ASG-এর দায়িত্ব আলাদা:
 
@@ -557,38 +565,39 @@ Chapter 10-এ আমরা reconciliation loop, controller, API server ও watc
 
 ---
 
-## 9. Kubernetes কী কী করে, আর কী করে না?
+## 9. Kubernetes কী করে, আর কী তোমাকেই সামলাতে হয়?
 
-### Kubernetes যেসব সমস্যার সমাধান করতে সাহায্য করে
+আগের section-গুলোতে আমরা Kubernetes-এর কয়েকটি কাজ দেখেছি। এখানে সেগুলো আবার তালিকা না করে, দায়িত্বের সীমাটা পরিষ্কার করি।
 
-- Containerized workloads deploy ও manage করা।
-- Desired replica count বজায় রাখার চেষ্টা করা।
-- Container/Pod failure থেকে recovery-র ব্যবস্থা করা।
-- Application rollout এবং rollback পরিচালনা করা।
-- Service discovery ও workload traffic abstraction।
-- Resource requests/limits ও scheduling।
-- Configuration ও secret resource পরিচালনা।
-- Metrics-এর ভিত্তিতে workload autoscaling-এর extensible mechanism।
+| Kubernetes কোন কাজে সাহায্য করে | এর মানে কী |
+|---|---|
+| Workload management | Pod deploy করা এবং replica count বজায় রাখার চেষ্টা |
+| Recovery ও rollout | Pod replacement, controlled update এবং rollback |
+| Scheduling ও service discovery | Pod-এর জন্য Node নির্বাচন এবং workload-এ traffic পৌঁছানোর abstraction |
+| Configuration ও resources | ConfigMap, Secret, resource request/limit-এর মতো API ও mechanism |
+| Autoscaling integration | Metrics-ভিত্তিক workload scaling; node scaling-এর জন্য আলাদা integration/tool |
 
-### Kubernetes সব সমস্যার সমাধান করে না
+তবে এই capability-গুলোর কিছু ব্যবহার করতে configuration, metrics provider, network/storage implementation বা cloud integration প্রয়োজন হয়। Kubernetes install করলেই সবকিছু স্বয়ংক্রিয়ভাবে প্রস্তুত থাকে না।
 
-Kubernetes নিজে:
+### Kubernetes তোমার হয়ে যা নিশ্চিত করে না
 
-- তোমার application code bug fix করে না।
-- Database-এর data correctness নিশ্চিত করে না।
-- সব failure-এ zero downtime guarantee করে না।
-- Application-এর জন্য CI pipeline বা source code build system বাধ্যতামূলকভাবে সরবরাহ করে না।
-- সব cloud infrastructure স্বয়ংক্রিয়ভাবে provision করে না, যদি সেই integration/configuration না থাকে।
-- Logging, monitoring, tracing-এর পূর্ণ solution বাধ্যতামূলকভাবে দেয় না।
-- Cluster administration, security, networking, storage, upgrades ও cost management-এর দায়িত্ব মুছে দেয় না।
+- Application code-এর bug fix বা business logic-এর correctness।
+- Database-এর data correctness বা backup strategy।
+- প্রতিটি failure-এ zero downtime।
+- Source code build ও CI/CD pipeline।
+- প্রয়োজনীয় cloud infrastructure provisioning, যদি তার integration configure না করা থাকে।
+- পূর্ণাঙ্গ logging, monitoring ও tracing solution।
+- Cluster security, upgrade, networking, storage এবং cost management-এর সব operational দায়িত্ব।
 
-Kubernetes একটি powerful platform, কিন্তু magic নয়। Application এবং infrastructure-এর design ভালো না হলে Kubernetes সেই সমস্যাগুলোকে শুধু অন্য জায়গায় নিয়ে যেতে পারে।
+**মূল কথা:** Kubernetes workload পরিচালনার platform, application-এর সব operational সমস্যার জাদুকরী সমাধান নয়। Application ও infrastructure-এর design দুর্বল হলে Kubernetes সেই দুর্বলতা নিজে থেকে ঠিক করে দেবে না।
 
 ---
 
 ## 10. Experiment: Kubernetes ছাড়া application পরিচালনার চিন্তা করো
 
-এই প্রথম chapter-এ cluster তৈরি করব না। আগে একটি thought experiment করি। পরবর্তী chapter-এ local environment তৈরি করে বাস্তব Kubernetes experiment শুরু করব।
+এই chapter-এ এখনো cluster তৈরি করব না। আগে একটি thought experiment-এর মাধ্যমে operations-এর দায়িত্বগুলো চিনে নিই।
+
+পরবর্তী chapter-এ local environment তৈরি করে বাস্তব Kubernetes experiment শুরু করব।
 
 ### Scenario
 
@@ -614,7 +623,24 @@ Kubernetes একটি powerful platform, কিন্তু magic নয়। Ap
 - Traffic কমলে replica কমানোর সিদ্ধান্ত কে নেবে?
 - Replica সংখ্যা বাড়ানো এবং EC2 সংখ্যা বাড়ানো কি একই সিদ্ধান্ত?
 
-এই প্রশ্নগুলোর উত্তর Kubernetes শেখার সময় আমরা একে একে খুঁজে বের করব।
+### কী ধরনের উত্তর আশা করা যায়?
+
+এখানে একটিমাত্র সঠিক architecture খুঁজে বের করা লক্ষ্য নয়। বরং উত্তরে নিচের reasoning-গুলো আছে কি না দেখো:
+
+- **Failure detection:** Health check বা monitoring দিয়ে failure শনাক্ত করতে হবে; process চলছে কি না দেখাই সবসময় application readiness প্রমাণ করে না।
+- **Traffic safety:** Load balancer-কে শুধু healthy ও ready replica-তে traffic পাঠাতে হবে।
+- **Replacement:** Replacement কোথায় চলবে তা নির্ধারণের পাশাপাশি machine capacity, runtime, configuration ও dependency নিশ্চিত করতে হবে।
+- **Safe recovery:** নতুন replica ready হওয়ার আগে পুরোনো replica সরালে capacity কমে যেতে পারে। তাই readiness ও rollout order গুরুত্বপূর্ণ।
+- **Automation:** একই কাজ বহু service-এর জন্য করতে হলে state, retry, idempotency, observability এবং failure handling-সহ automation দরকার।
+
+Demand বাড়ার exercise-এও দুটি সিদ্ধান্ত আলাদা রাখো:
+
+1. **Workload scaling:** Metric ও policy দেখে application replica 3 থেকে 12 করা।
+2. **Infrastructure scaling:** নতুন Pod চালানোর উপযুক্ত Node না থাকলে Node capacity বাড়ানো।
+
+Replica বাড়ালেই EC2 বাড়াতে হবে এমন নয়। আগে existing Node-এ পর্যাপ্ত resource আছে কি না এবং Pod-এর scheduling constraint মেলে কি না দেখতে হবে। Traffic কমলে scale-in policy replica কমাবে; Node সরানোর আগে খালি করা ও workload নিরাপদে সরানোর শর্তও বিবেচনা করতে হবে।
+
+এই reasoning-গুলোই Kubernetes শেখার সময় আমরা একে একে বাস্তবে যাচাই করব।
 
 ---
 
