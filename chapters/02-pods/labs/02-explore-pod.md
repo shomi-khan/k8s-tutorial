@@ -93,7 +93,8 @@ IP নোট করো। Pod recreate হলে IP বদলাতে পার
 ```bash
 kubectl exec pod-explorer -c helper -- sh -c 'exit 1'
 kubectl get pod pod-explorer
-kubectl get pod pod-explorer -o jsonpath='{.status.containerStatuses[*].name}{"\n"}{.status.containerStatuses[*].restartCount}{"\n"}'
+kubectl get pod pod-explorer -o jsonpath='{.status.containerStatuses[*].name}' ; echo
+kubectl get pod pod-explorer -o jsonpath='{.status.containerStatuses[*].restartCount}' ; echo
 kubectl describe pod pod-explorer
 ```
 
