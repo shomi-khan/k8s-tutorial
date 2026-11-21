@@ -248,12 +248,19 @@ flowchart TD
 
 - তুমি 3টি replica চাও।
 - বর্তমানে 3টি চলছে।
-- একটি Pod/instance নষ্ট হয়ে 2টি থাকে।
-- Kubernetes-এর workload controller বুঝতে পারে desired count-এর চেয়ে কম আছে।
-- নতুন Pod তৈরি করার চেষ্টা করে।
-- Scheduling ও node capacity অনুযায়ী সেটি চালু হয়।
+- একটি **Pod** terminate হয়ে গেলে desired count-এর তুলনায় একটি Pod কম থাকে।
+- Deployment-এর অধীনে থাকা ReplicaSet controller প্রয়োজনীয় replacement Pod তৈরি করে।
+- Scheduler replacement Pod-টিকে উপযুক্ত Node-এ assign করার চেষ্টা করে।
+- Node-এর kubelet এবং container runtime সেখানে container চালু করে।
 
-এই behavior-এর details আমরা পরবর্তী chapter-গুলোতে খুলে দেখব।
+এখানে Process, Container, Pod এবং Node failure এক ঘটনা নয়:
+
+- **Application process crash:** Container-এর প্রধান process শেষ হয়ে যেতে পারে। Deployment-এর মতো workload-এ সাধারণত `restartPolicy: Always` থাকে, তাই kubelet একই Pod-এর container আবার চালু করার চেষ্টা করে।
+- **Container failure:** Pod-এর `restartPolicy` অনুযায়ী kubelet container-টিকে আবার চালু করার চেষ্টা করে; এতে Pod-টি একই থাকতে পারে।
+- **Pod failure বা deletion:** Pod আর recover করা সম্ভব না হলে Deployment-এর অধীনে থাকা ReplicaSet প্রয়োজন অনুযায়ী replacement Pod তৈরি করে। নতুন Pod পুরোনো Pod-এর একই object নয়; এটি নতুন Pod identity নিয়ে তৈরি হয়।
+- **Node failure:** পুরো Node unavailable হলে সেখানে থাকা Pod-গুলোও unavailable হয়। Node-এর অবস্থা শনাক্ত হওয়া, Pod-গুলোকে failed/evicted হিসেবে বিবেচনা করা এবং replacement তৈরি হওয়ার মধ্যে কিছু সময় লাগতে পারে। Workload controller তখন অন্য উপযুক্ত Node-এ replacement Pod চালানোর চেষ্টা করে।
+
+এই পার্থক্যগুলো মনে রাখলেই failure হলে Kubernetes ঠিক কী recover করছে, তা গুলিয়ে যাবে না। বিস্তারিত lifecycle পরের chapter-গুলোতে আসবে।
 
 ---
 
@@ -269,11 +276,12 @@ flowchart TD
 
 Kubernetes-এ সাধারণত container-কে সরাসরি manage না করে **Pod** নামের একটি unit-এর মধ্যে চালানো হয়।
 
-সহজভাবে:
+সহজভাবে, চারটি ধারণা আলাদা করে দেখি:
 
-- **Container:** তোমার application process এবং তার runtime environment।
-- **Pod:** Kubernetes-এর scheduling ও management-এর সবচেয়ে ছোট deployable unit। একটি Pod-এ এক বা একাধিক container থাকতে পারে। সাধারণ web API-র ক্ষেত্রে প্রায়ই একটি application container-ই থাকে।
-- **Replica:** একই application-এর একাধিক copy। যেমন 3টি replica মানে application-এর 3টি আলাদা Pod চালানো।
+- **Process:** Operating System-এ চলমান একটি program-এর execution। যেমন তোমার API server চালু হলে তার একটি বা একাধিক process চলতে পারে।
+- **Container:** Process চালানোর জন্য isolated environment। এতে application-এর filesystem, dependencies, configuration এবং runtime boundary থাকে। একটি container-এ সাধারণত একটি প্রধান application process চালানো হয়, যদিও প্রয়োজন হলে একাধিক process-ও চলতে পারে। Container নিজে process নয়; process-কে চালানোর ও isolate করার environment।
+- **Pod:** Kubernetes-এর সবচেয়ে ছোট deployable ও scheduling unit। একটি Pod-এ এক বা একাধিক container থাকতে পারে। একই Pod-এর container-গুলো network namespace (যেমন একই Pod IP ও localhost) এবং নির্দিষ্ট volume share করতে পারে।
+- **Replica:** কোনো workload-এর একটি running copy। Deployment-এর ক্ষেত্রে সাধারণত প্রতিটি replica একটি Pod। তাই 3টি replica বলতে সাধারণত একই application-এর 3টি Pod বোঝায়, 3টি container বা 3টি process নয়।
 
 ধরো, আমাদের API application-এর 3টি replica দরকার:
 
@@ -318,7 +326,11 @@ flowchart TD
 | Traffic আরও বেড়েছে | 6 |
 | Traffic কমে গেছে | 2 |
 
-এটি বোঝানোর জন্য সরল উদাহরণ। বাস্তবে HPA নির্দিষ্ট সময়ের metrics, target utilization, minimum ও maximum replica এবং scaling behavior বিবেচনা করে। CPU ছাড়াও memory বা custom/external metric ব্যবহার করা যায়, উপযুক্ত metrics integration থাকলে।
+এটি বোঝানোর জন্য সরল উদাহরণ। CPU utilization বোঝার জন্য একটি বিষয় জরুরি: HPA CPU usage-কে সংশ্লিষ্ট container-গুলোর CPU **request**-এর তুলনায় হিসাব করে। একটি container-যুক্ত Pod-এর ক্ষেত্রে CPU request `500m` এবং গড় usage `400m` হলে utilization হলো `80%` (`400 ÷ 500 × 100`)। একাধিক container থাকলে তাদের usage ও request একসঙ্গে বিবেচিত হয়।
+
+CPU utilization target ব্যবহার করতে হলে সংশ্লিষ্ট container-গুলোর CPU request define করা থাকা দরকার। কোনো container-এর request না থাকলে সেই Pod-এর utilization নির্ভরযোগ্যভাবে হিসাব করা যায় না; ফলে HPA-এর metric calculation অসম্পূর্ণ হতে পারে।
+
+বাস্তবে HPA নির্দিষ্ট সময়ের metrics, target utilization, minimum ও maximum replica এবং scaling behavior বিবেচনা করে। CPU ছাড়াও memory বা custom/external metric ব্যবহার করা যায়, উপযুক্ত metrics integration থাকলে।
 
 একটি গুরুত্বপূর্ণ বিষয়: **HPA নিজে নতুন server বা EC2 instance তৈরি করে না।** HPA শুধু Kubernetes-কে জানায়, “এই application-এর Pod replica এতগুলো হওয়া দরকার।”
 
@@ -338,7 +350,7 @@ Cluster-এ যে machine-গুলো Kubernetes-এর worker node হিস�
 - Node B প্রায় পূর্ণ।
 - Node C-তে Pod চালানোর জন্য প্রয়োজনীয় memory নেই।
 
-Scheduler Pod-এর resource request এবং অন্যান্য scheduling requirement বিবেচনা করে উপযুক্ত node নির্বাচন করে।
+Scheduler Pod-এর resource request (যেমন CPU ও memory), node-এ available capacity এবং অন্যান্য scheduling constraint বিবেচনা করে উপযুক্ত Node নির্বাচন করে। উদাহরণ হিসেবে `nodeSelector`/node affinity, taint ও toleration, এবং volume topology-এর মতো constraint scheduling-কে প্রভাবিত করতে পারে।
 
 ```mermaid
 flowchart TD
@@ -363,12 +375,13 @@ Scheduler যা করে না:
 
 ধরো HPA 2টি থেকে 8টি Pod করতে বলেছে। কিন্তু বর্তমান EC2 machine-গুলোতে জায়গা আছে মাত্র 5টি Pod-এর।
 
-- 5টি Pod node-এ schedule হয়ে চলতে পারে।
-- বাকি 3টি Pod তৈরি হলেও কোনো node-এ জায়গা না থাকায় **Pending** অবস্থায় থাকবে।
-- Scheduler বারবার উপযুক্ত node খুঁজবে।
-- কিন্তু নতুন capacity না আসা পর্যন্ত সেগুলো চালু হতে পারবে না।
+- 5টি Pod Node-এ schedule হয়ে চলতে পারে।
+- বাকি 3টি Pod তৈরি হলেও কোনো Node-এ জায়গা না থাকায় **Pending** অবস্থায় থাকবে।
+- Scheduler উপযুক্ত Node খুঁজতে থাকবে, কিন্তু capacity না থাকলে সেগুলো schedule করতে পারবে না।
 
-এখানেই infrastructure scaling-এর প্রয়োজন।
+তবে মনে রেখো, **সব Pending Pod-এর কারণ capacity shortage নয়**। Pod Pending হতে পারে insufficient CPU/memory, `nodeSelector` বা affinity mismatch, untolerated taint, অথবা প্রয়োজনীয় PersistentVolume পাওয়া না যাওয়ার কারণেও। নতুন Node যোগ করলেই সব ধরনের Pending সমস্যা সমাধান হবে না।
+
+Node autoscaler তখনই সাহায্য করতে পারে, যখন নতুন উপযুক্ত Node যোগ হলে Pod-টি schedule করা সম্ভব হবে। তাই Pending status দেখেই অন্ধভাবে Node বাড়ানো হয় না; scheduling failure-এর কারণও বুঝতে হয়।
 
 ### 7.5 AWS ASG-এর সঙ্গে Kubernetes কীভাবে কাজ করে?
 
@@ -393,7 +406,7 @@ ASG-এর কাজ EC2 instance fleet পরিচালনা করা। Ku
 
 ধরো, EKS cluster-এ worker node-গুলো একটি EC2 Auto Scaling Group বা EKS Managed Node Group দিয়ে তৈরি করা হয়েছে।
 
-Cluster Autoscaler cluster-এর অবস্থা দেখে। যদি কিছু Pod resource না থাকার কারণে schedule হতে না পারে, এটি বুঝতে পারে যে অতিরিক্ত node দরকার হতে পারে। উপযুক্ত node group-এর capacity বাড়ানোর জন্য এটি AWS-এর সঙ্গে কাজ করে। Node group-এর পেছনে ASG থাকলে ASG নতুন EC2 instance চালু করে।
+Cluster Autoscaler cluster-এর অবস্থা দেখে। কিছু Pod scheduling-এর জন্য unschedulable থাকলে এটি যাচাই করে configured node group-এর উপযুক্ত Node যোগ করলে Pod-গুলো schedule করা সম্ভব হবে কি না। সম্ভব হলে এটি উপযুক্ত node group-এর size বাড়ানোর জন্য AWS-এর সঙ্গে কাজ করে। Node group-এর পেছনে ASG থাকলে ASG নতুন EC2 instance চালু করে। এটি কাজ করার জন্য node group discovery, IAM permission, scaling limits এবং সঠিক cluster configuration প্রয়োজন।
 
 নতুন EC2 instance Kubernetes cluster-এ worker node হিসেবে যুক্ত হলে Scheduler আবার Pending Pod-গুলোর জন্য জায়গা খুঁজতে পারে।
 
@@ -430,7 +443,7 @@ Karpenter আরেকটি node autoscaling/provisioning tool। এটিও 
 - **Cluster Autoscaler:** সাধারণত বিদ্যমান node group/ASG-এর capacity adjust করে।
 - **Karpenter:** প্রয়োজন অনুযায়ী উপযুক্ত EC2 instance বেছে নিয়ে সরাসরি provision করতে পারে।
 
-দুটিরই configuration, permission এবং infrastructure setup দরকার। এগুলো Kubernetes core-এর মধ্যে স্বয়ংক্রিয়ভাবে চালু থাকে না।
+দুটিরই configuration, permission এবং infrastructure setup দরকার। এগুলো Kubernetes core-এর মধ্যে স্বয়ংক্রিয়ভাবে চালু থাকে না। Cluster Autoscaler বা Karpenter কোনোটিই প্রতিটি Pending Pod-এর সমাধান নয়; Pod-এর scheduling constraint নতুন Node দিয়েও পূরণ করা সম্ভব হতে হবে।
 
 ### 7.6 দুই ধরনের scaling একসঙ্গে: সম্পূর্ণ উদাহরণ
 
@@ -472,7 +485,19 @@ sequenceDiagram
     S->>S: Assign pending Pods to the new node
 ```
 
-Traffic পরে কমে গেলে HPA Pod replica কমাতে পারে। Node autoscaler-ও খালি বা কম ব্যবহৃত node সরানোর চেষ্টা করতে পারে, যদি configuration ও safety condition তা অনুমোদন করে। ফলে application-এর Pod সংখ্যা এবং EC2 machine-এর সংখ্যা দুইটি আলাদা policy অনুযায়ী বাড়ে বা কমে।
+Traffic পরে কমে গেলে HPA Pod replica কমাতে পারে। Node autoscaler-ও খালি বা কম ব্যবহৃত Node সরানোর চেষ্টা করতে পারে, যদি configuration ও safety condition তা অনুমোদন করে। ফলে application-এর Pod সংখ্যা এবং EC2 machine-এর সংখ্যা দুইটি আলাদা policy অনুযায়ী বাড়ে বা কমে।
+
+এই উদাহরণে HPA, Deployment, Scheduler, kubelet, Cluster Autoscaler এবং ASG-এর দায়িত্ব আলাদা:
+
+| Component | মূল দায়িত্ব |
+|---|---|
+| Deployment | Application rollout পরিচালনা করে এবং ReplicaSet-এর মাধ্যমে কাঙ্ক্ষিত Pod replica count প্রকাশ করে |
+| ReplicaSet | নির্দিষ্ট সংখ্যক Pod replica বজায় রাখার চেষ্টা করে |
+| HPA | Metrics ও policy দেখে scale target-এর desired replica count পরিবর্তন করে |
+| Scheduler | Pending Pod-এর জন্য উপযুক্ত বিদ্যমান Node নির্বাচন করা |
+| Kubelet | নিজের Node-এ Pod ও container-এর lifecycle পরিচালনা করা |
+| Cluster Autoscaler | নতুন Node যোগ করলে schedule হতে পারে এমন unschedulable Pod-এর জন্য node group capacity বাড়ানোর চেষ্টা করা |
+| AWS ASG | EC2 instance-এর সংখ্যা পরিচালনা করা |
 
 ### 7.7 ASG বনাম Kubernetes: সংক্ষেপে
 
