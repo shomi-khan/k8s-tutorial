@@ -1,103 +1,104 @@
-# Kubernetes Tutorial
+# Kubernetes টিউটোরিয়াল
 
-A hands-on journey from understanding why Kubernetes exists to understanding how it works under the hood and how to operate applications on it.
+Kubernetes শেখার একটি হাতে-কলমে যাত্রা। Kubernetes কেন তৈরি হয়েছে, এটি ভেতরে কীভাবে কাজ করে এবং কীভাবে এর সাহায্যে application পরিচালনা করতে হয়, ধাপে ধাপে শিখব।
 
-This repository is a learning book, not a collection of YAML recipes. The goal is to build a mental model of Kubernetes: the problems it solves, the mechanisms behind its behavior, the trade-offs it makes, and how to investigate it when things go wrong.
+এই repository শুধু YAML উদাহরণ বা command-এর সংগ্রহ নয়। এটি একটি পূর্ণাঙ্গ learning book। আমাদের লক্ষ্য Kubernetes-এর mental model তৈরি করা: এটি কোন সমস্যার সমাধান করে, কীভাবে করে, এর design trade-off কী এবং কোনো কিছু ভুল হলে কীভাবে তা অনুসন্ধান করতে হয়।
 
-## Learning Goals
+## শেখার লক্ষ্য
 
-By the end of this journey, you should be able to:
-- Explain Kubernetes concepts and the problems they solve.
-- Deploy, inspect, scale, update, and troubleshoot applications on Kubernetes.
-- Understand resource relationships rather than treating manifests as isolated configuration.
-- Reason about scheduling, networking, storage, health, security, and failure behavior.
-- Understand core internals such as the API server, controllers, reconciliation, watches, and etcd.
-- Make informed operational decisions instead of blindly copying configurations.
+এই শেখার যাত্রা শেষে তুমি যেন:
 
-## How We Learn
+- Kubernetes-এর গুরুত্বপূর্ণ concept এবং সেগুলো কেন প্রয়োজন, নিজের ভাষায় ব্যাখ্যা করতে পারো।
+- Kubernetes-এ application deploy, inspect, scale, update এবং troubleshoot করতে পারো।
+- বিচ্ছিন্ন configuration হিসেবে নয়, বরং Kubernetes resource-গুলোর পারস্পরিক সম্পর্ক বুঝতে পারো।
+- Scheduling, networking, storage, health, security এবং failure behavior নিয়ে যুক্তিসংগতভাবে চিন্তা করতে পারো।
+- API server, controller, reconciliation, watch এবং etcd-এর মতো গুরুত্বপূর্ণ internal mechanism সম্পর্কে বুঝতে পারো।
+- অন্ধভাবে configuration copy না করে, বাস্তব পরিস্থিতি অনুযায়ী সিদ্ধান্ত নিতে পারো।
 
-Each topic moves from intuition to implementation, then verifies understanding through experiments:
+## আমরা কীভাবে শিখব
 
-1. **Concept:** Problem, motivation, terminology, and mental model.
-2. **Visualization:** Diagrams, request flows, timelines, and relationships (Mermaid where useful).
-3. **Under the hood:** Component interactions and implementation details.
-4. **Hands-on lab:** Apply the concept in a local cluster.
-5. **Experiment and observe:** Inspect events, status, logs, and change one variable at a time.
-6. **Failure analysis:** Safely break something, diagnose it, and learn Kubernetes' recovery boundaries.
-7. **Checkpoint:** Questions or small tasks to verify understanding.
+প্রতিটি বিষয় intuition থেকে শুরু করে implementation পর্যন্ত নিয়ে যাব। এরপর experiment-এর মাধ্যমে বোঝাপড়া যাচাই করব।
 
-YAML and commands are tools for expressing and observing Kubernetes behavior, not the end goal.
+1. **Concept:** সমস্যাটি কী, কেন তৈরি হয়, প্রয়োজনীয় terminology এবং mental model।
+2. **Visualization:** Diagram, request flow, timeline ও resource-গুলোর সম্পর্ক। প্রয়োজন অনুযায়ী Mermaid ব্যবহার করা হবে।
+3. **Under the hood:** Kubernetes-এর component-গুলো কীভাবে একে অপরের সঙ্গে কাজ করে এবং ভেতরে কী ঘটে।
+4. **Hands-on lab:** Local Kubernetes cluster-এ ধারণাটি বাস্তবে প্রয়োগ করা।
+5. **Experiment ও observation:** Event, status, log পর্যবেক্ষণ করা এবং একবারে একটি variable পরিবর্তন করে ফলাফল দেখা।
+6. **Failure analysis:** নিরাপদভাবে কোনো কিছুতে failure তৈরি করা, সেটি diagnose করা এবং Kubernetes-এর recovery-র সীমাবদ্ধতা বোঝা।
+7. **Checkpoint:** শেখা বিষয়গুলো যাচাই করার জন্য প্রশ্ন বা ছোট task।
+
+YAML ও command হলো Kubernetes-এর behavior প্রকাশ ও পর্যবেক্ষণ করার মাধ্যম, শেখার চূড়ান্ত লক্ষ্য নয়।
 
 ## Chapter Roadmap
 
-| Chapter | Topic | What We'll Learn |
+| Chapter | বিষয় | কী শিখব |
 |---|---|---|
-| 00 | [Kubernetes Foundation](chapters/00-kubernetes-foundation/README.md) | Application operations as they grow; containers; why orchestration is needed; what Kubernetes is and isn't. |
-| 01 | Kubernetes Architecture | Cluster, nodes, control plane, worker nodes, major components, and how they coordinate. |
-| 02 | Pods | Why Pods exist; structure, lifecycle, networking basics, multi-container patterns, and limitations. |
-| 03 | Workloads: Deployment and ReplicaSet | Desired replicas, declarative management, rollouts, scaling, self-healing, and ReplicaSet's role. |
-| 04 | Kubernetes Networking | Pod networking, Services, selectors, endpoints, DNS, ClusterIP, NodePort, and introduction to Ingress/Gateway. |
-| 05 | Configuration and Secrets | ConfigMaps, Secrets, environment variables, mounted files, update behavior, and security caveats. |
-| 06 | Storage and Persistence | Volumes, PVs, PVCs, StorageClasses, lifecycle, and persistence beyond container filesystems. |
-| 07 | Scheduling and Resource Management | Scheduler, requests/limits, capacity, scheduling decisions, affinity/anti-affinity, taints, tolerations, and resource pressure. |
-| 08 | Application Health and Deployment Safety | Startup/readiness/liveness probes, rolling updates, rollout status, rollback, and health-driven traffic/recovery. |
-| 09 | Kubernetes Security Fundamentals | Authentication vs authorization, RBAC, ServiceAccounts, security contexts, least privilege, and common mistakes. |
-| 10 | Kubernetes Internals | API server, etcd, controllers, reconciliation loops, watches, desired vs actual state, and change propagation. |
-| 11 | Observability and Troubleshooting | Events, logs, resource inspection, metrics concepts, common failure states, and systematic debugging. |
-| 12 | Production Practices | Deployment strategies, resource planning, reliability, operational trade-offs, and production-oriented design. |
-| 13 | Capstone: Deploy and Operate an Application | Deploy, configure, expose, scale, update, break, diagnose, and recover a realistic small application. |
+| 00 | [Kubernetes-এর ভিত্তি](chapters/00-kubernetes-foundation/README.md) | Application বড় হওয়ার সঙ্গে সঙ্গে পরিচালনার সমস্যা; container; orchestration কেন প্রয়োজন; Kubernetes কী এবং কী নয়। |
+| 01 | Kubernetes Architecture | Cluster, node, control plane, worker node, প্রধান component এবং তারা কীভাবে একসঙ্গে কাজ করে। |
+| 02 | Pods | Pod কেন আছে; গঠন, lifecycle, networking-এর ভিত্তি, multi-container pattern এবং সীমাবদ্ধতা। |
+| 03 | Workloads: Deployment ও ReplicaSet | Desired replica, declarative management, rollout, scaling, self-healing এবং ReplicaSet-এর ভূমিকা। |
+| 04 | Kubernetes Networking | Pod networking, Service, selector, endpoint, DNS, ClusterIP, NodePort এবং Ingress/Gateway-এর পরিচিতি। |
+| 05 | Configuration ও Secrets | ConfigMap, Secret, environment variable, mounted file, update behavior এবং security সতর্কতা। |
+| 06 | Storage ও Persistence | Volume, PV, PVC, StorageClass, lifecycle এবং container filesystem-এর বাইরে data সংরক্ষণ। |
+| 07 | Scheduling ও Resource Management | Scheduler, request/limit, capacity, scheduling decision, affinity/anti-affinity, taint, toleration এবং resource pressure। |
+| 08 | Application Health ও নিরাপদ Deployment | Startup/readiness/liveness probe, rolling update, rollout status, rollback এবং health check-এর মাধ্যমে traffic ও recovery নিয়ন্ত্রণ। |
+| 09 | Kubernetes Security-এর ভিত্তি | Authentication ও authorization-এর পার্থক্য, RBAC, ServiceAccount, security context, least privilege এবং সাধারণ ভুল। |
+| 10 | Kubernetes Internals | API server, etcd, controller, reconciliation loop, watch, desired state বনাম actual state এবং change propagation। |
+| 11 | Observability ও Troubleshooting | Event, log, resource inspection, metrics-এর ধারণা, সাধারণ failure state এবং systematic debugging। |
+| 12 | Production Practices | Deployment strategy, resource planning, reliability, operational trade-off এবং production-oriented design। |
+| 13 | Capstone: একটি Application Deploy ও পরিচালনা | একটি বাস্তবসম্মত ছোট application deploy, configure, expose, scale, update, break, diagnose এবং recover করা। |
 
-### Roadmap Notes
+### Roadmap সম্পর্কে কিছু কথা
 
-- This is a learning sequence, not a promise to cover every Kubernetes feature.
-- Helm, custom resources, operators, autoscaling, and advanced networking may be introduced when they fit naturally or added as focused extensions.
-- We will distinguish Kubernetes core behavior from add-ons, cloud-provider behavior, and third-party tools.
-- The capstone will reuse earlier concepts instead of introducing unrelated tools.
+- এটি শেখার একটি ধারাবাহিক ক্রম, Kubernetes-এর প্রতিটি feature শেখানোর প্রতিশ্রুতি নয়।
+- Helm, custom resource, operator, autoscaling এবং advanced networking প্রয়োজন অনুযায়ী পরিচয় করানো হবে অথবা আলাদা extension হিসেবে যোগ হবে।
+- Kubernetes-এর নিজস্ব behavior এবং add-on, cloud provider বা third-party tool-এর behavior আলাদা করে চিহ্নিত করা হবে।
+- Capstone-এ নতুন নতুন unrelated tool না এনে আগের chapter-গুলোর ধারণা একত্রে ব্যবহার করা হবে।
 
-## Chapter Structure
+## প্রতিটি Chapter-এর কাঠামো
 
-Chapters will follow this structure, expanding or omitting sections when appropriate:
+প্রতিটি chapter মোটামুটি একই কাঠামো অনুসরণ করবে। বিষয় অনুযায়ী কোনো section বাদ বা বড় করা হতে পারে।
 
-1. **Why This Exists** — A concrete problem and why a mechanism is needed.
-2. **Mental Model** — An intuitive model before terminology and configuration.
-3. **How It Works** — Responsibilities, key concepts, relationships, and behavior.
-4. **Visualization** — Architecture, sequence, flow, state, or relationship diagrams as useful.
-5. **Under the Hood** — Component interactions, API behavior, scheduling, networking, state transitions, or Linux/container mechanics.
-6. **Hands-on Lab** — Focused exercises with explained commands and manifests.
-7. **Observe and Experiment** — Inspect status/events/logs; change inputs and verify outcomes.
-8. **Failure Analysis** — Introduce a controlled failure, diagnose it, and understand Kubernetes' recovery limits.
-9. **Key Takeaways** — Essential mental models and misconceptions.
-10. **Checkpoint** — Questions or tasks that test understanding rather than recall.
+1. **কেন এটি প্রয়োজন?** — একটি বাস্তব সমস্যা এবং সেটি সমাধানে এই mechanism কেন দরকার।
+2. **Mental Model** — Terminology ও configuration-এর আগে সহজবোধ্য ধারণা তৈরি।
+3. **কীভাবে কাজ করে?** — দায়িত্ব, গুরুত্বপূর্ণ concept, resource-গুলোর সম্পর্ক এবং behavior।
+4. **Visualization** — প্রয়োজন অনুযায়ী architecture, sequence, flow, state বা relationship diagram।
+5. **Under the Hood** — Component interaction, API behavior, scheduling, networking, state transition অথবা Linux/container mechanics।
+6. **Hands-on Lab** — ব্যাখ্যাসহ command ও manifest ব্যবহার করে ছোট ছোট practical exercise।
+7. **পর্যবেক্ষণ ও Experiment** — Status, event ও log দেখা; configuration পরিবর্তন করে ফলাফল যাচাই।
+8. **Failure Analysis** — নিয়ন্ত্রিত failure তৈরি, diagnose করা এবং Kubernetes কীভাবে recover করে বা কোথায় পারে না তা বোঝা।
+9. **Key Takeaways** — গুরুত্বপূর্ণ mental model ও প্রচলিত ভুল ধারণার সারাংশ।
+10. **Checkpoint** — শুধু মুখস্থ নয়, সত্যিকারের বোঝাপড়া যাচাই করার প্রশ্ন বা task।
 
-## Learning Environment
+## শেখার Environment
 
-We will use a local cluster to keep experiments reproducible without cloud accounts or paid infrastructure.
+Cloud account বা paid infrastructure ছাড়াই যাতে experiment করা যায়, সে জন্য আমরা local Kubernetes cluster ব্যবহার করব।
 
-| Tool | Purpose |
+| Tool | কেন ব্যবহার করব |
 |---|---|
-| Docker | Run containers and provide the container environment for our local cluster. |
-| Kind (Kubernetes in Docker) | Run local Kubernetes clusters with Docker containers acting as nodes. |
-| kubectl | Inspect and manage Kubernetes resources through the Kubernetes API. |
-| Terminal | Execute commands and investigate output/failures. |
-| Git | Track tutorial material, manifests, and lab changes. |
+| Docker | Container চালানো এবং local cluster-এর node environment তৈরি করা। |
+| Kind (Kubernetes in Docker) | Docker container-কে node হিসেবে ব্যবহার করে local Kubernetes cluster তৈরি করা। |
+| kubectl | Kubernetes API-এর মাধ্যমে resource inspect ও manage করা। |
+| Terminal | Command চালানো এবং output ও failure অনুসন্ধান করা। |
+| Git | Tutorial content, manifest এবং lab-এর পরিবর্তন track করা। |
 
-We may introduce extra tools later only when a topic genuinely needs them.
+কোনো topic-এর জন্য সত্যিই প্রয়োজন না হলে অতিরিক্ত tool যোগ করব না।
 
-### Environment Setup Progression
+### Environment Setup-এর ধাপ
 
-1. Verify the container environment and basic container workflow.
-2. Install and verify local Kubernetes tools.
-3. Create a local cluster using Kind.
-4. Configure kubectl to communicate with it.
-5. Verify the cluster and inspect its nodes.
-6. Reuse this environment throughout labs.
-7. Clean up resources/clusters when appropriate.
+1. Container environment এবং basic container workflow যাচাই।
+2. প্রয়োজনীয় local Kubernetes tool install ও verify করা।
+3. Kind ব্যবহার করে local cluster তৈরি করা।
+4. kubectl-কে cluster-এর সঙ্গে configure করা।
+5. Cluster verify করা এবং node inspect করা।
+6. পরবর্তী lab-গুলোতে একই environment ব্যবহার করা।
+7. প্রয়োজন অনুযায়ী resource ও cluster cleanup করা।
 
-Detailed installation and troubleshooting instructions will live in the relevant setup chapter or lab.
+Installation এবং troubleshooting-এর বিস্তারিত নির্দেশনা সংশ্লিষ্ট setup chapter বা lab-এ যোগ করা হবে।
 
-## Repository Structure
+## Repository-এর কাঠামো
 
-The tutorial will grow chapter by chapter:
+Chapter ধরে ধরে tutorial বড় হবে। প্রস্তাবিত কাঠামো:
 
 ```text
 k8s-tutorial/
@@ -118,41 +119,46 @@ k8s-tutorial/
     └── ...
 ```
 
-Not every chapter needs every folder. We will add structure when it serves the content rather than create empty scaffolding.
+প্রতিটি chapter-এর জন্য সব folder প্রয়োজন হবে না। কনটেন্টের কাজে লাগলেই নতুন file বা folder যোগ করব। শুধু কাঠামো দেখানোর জন্য খালি folder তৈরি করব না।
 
-## Study Workflow
+## শেখার Workflow
 
-The conversation is the interactive classroom and lab companion; the repository is the durable reference.
+আমাদের শেখার দুটি জায়গা থাকবে: ChatGPT হবে interactive classroom ও lab companion, আর repository হবে দীর্ঘমেয়াদি reference book।
 
-1. **Start a chapter here:** Lessons are taught conversationally, primarily in Bengali, with English Kubernetes terminology retained where useful.
-2. **Explore:** Ask questions and clarify gaps before moving on.
-3. **Visualize:** Use diagrams, flows, and concrete examples.
-4. **Run labs:** Execute commands locally and inspect actual cluster state.
-5. **Experiment:** Predict the outcome of a change, then verify it.
-6. **Investigate failures:** Diagnose intentionally introduced issues using evidence.
-7. **Finalize:** Once the lesson is settled, turn it into a polished English chapter in this repository.
-8. **Review and continue:** Link chapters and revisit earlier concepts as new topics deepen them.
+1. **এখানে chapter শুরু:** মূলত বাংলায় conversational lesson হবে। প্রয়োজনীয় Kubernetes terminology ইংরেজিতেই রাখা হবে।
+2. **বিষয়টি নিয়ে আলোচনা:** প্রশ্ন করা, বিকল্প ব্যাখ্যা দেখা এবং অস্পষ্টতা দূর করা।
+3. **Visualization:** Diagram, flow ও বাস্তব উদাহরণ দিয়ে mental model তৈরি।
+4. **Lab চালানো:** নিজের machine-এ command execute করে cluster-এর প্রকৃত অবস্থা দেখা।
+5. **Experiment:** কোনো পরিবর্তনের পর কী ঘটবে তা আগে অনুমান করা, তারপর পরীক্ষা করে দেখা।
+6. **Failure অনুসন্ধান:** ইচ্ছাকৃতভাবে তৈরি করা সমস্যা evidence-এর ভিত্তিতে diagnose করা।
+7. **Chapter চূড়ান্ত করা:** বিষয়টি ভালোভাবে বোঝা ও আলোচনা শেষ হলে সেটিকে পরিপাটি tutorial হিসেবে repository-তে সংরক্ষণ করা।
+8. **Review ও পরবর্তী অধ্যায়:** Chapter-গুলোর মধ্যে link রাখা এবং নতুন বিষয় শেখার সময় আগের ধারণাগুলো আরও গভীরভাবে দেখা।
+
+অর্থাৎ, Conversation হবে interactive classroom; repository হবে আমাদের স্থায়ী reference।
 
 ## Prerequisites
 
-No Kubernetes experience is required. Helpful foundations:
-- Basic command-line usage
-- Fundamental software development concepts
-- Basic networking (IP addresses, ports, HTTP), introduced as needed
-- Basic Docker/container familiarity (we will review relevant concepts before depending on them)
+Kubernetes সম্পর্কে আগে থেকে কিছু জানা বাধ্যতামূলক নয়। তবে নিচের বিষয়গুলো জানা থাকলে শেখা সহজ হবে:
 
-We will not assume prior knowledge of Kubernetes internals, cluster administration, or cloud infrastructure.
+- Command line-এর সাধারণ ব্যবহার।
+- Software development-এর মৌলিক ধারণা।
+- Networking-এর প্রাথমিক ধারণা (IP address, port, HTTP)। প্রয়োজন অনুযায়ী এগুলোও ব্যাখ্যা করা হবে।
+- Docker ও container সম্পর্কে সামান্য পরিচিতি। প্রয়োজনীয় অংশগুলো আগে আলোচনা করব।
 
-## Guiding Principles
+Kubernetes internals, cluster administration বা cloud infrastructure সম্পর্কে পূর্ব অভিজ্ঞতা ধরে নেওয়া হবে না।
 
-- **Understand before memorizing:** Explain why each resource or setting exists.
-- **Make invisible behavior visible:** Use diagrams, status inspection, events, and experiments.
-- **Learn by doing:** Major concepts should include practical exercises.
-- **Study failure, not just success:** Understand recovery mechanisms and their limits.
-- **Separate core from extensions:** Identify Kubernetes behavior versus vendors, add-ons, and external tools.
-- **Build progressively:** Reuse concepts rather than jumping between unrelated topics.
-- **Keep it realistic:** Use practical application scenarios without unnecessary complexity.
+## আমাদের শেখার নীতিমালা
 
-## Start Here
+- **মুখস্থ নয়, বুঝে শেখা:** প্রতিটি resource বা setting কেন আছে তা ব্যাখ্যা করা।
+- **অদৃশ্য behavior দৃশ্যমান করা:** Diagram, status inspection, event এবং experiment ব্যবহার করা।
+- **নিজে করে শেখা:** গুরুত্বপূর্ণ concept-এর সঙ্গে practical exercise রাখা।
+- **শুধু সফলতা নয়, failure-ও শেখা:** Recovery mechanism এবং তার সীমাবদ্ধতা বোঝা।
+- **Core ও extension আলাদা রাখা:** Kubernetes-এর নিজস্ব behavior এবং vendor, add-on বা external tool-এর behavior আলাদা করে চেনা।
+- **ধাপে ধাপে এগোনো:** সম্পর্কহীন topic-এ লাফ না দিয়ে আগের ধারণা কাজে লাগানো।
+- **বাস্তবসম্মত থাকা:** অপ্রয়োজনীয় complexity ছাড়াই বাস্তব application operation-এর scenario ব্যবহার করা।
 
-Begin with **Chapter 00: Kubernetes Foundation**. Before learning Kubernetes resources, we will understand the operational problems Kubernetes solves and establish the container foundation needed for the rest of the tutorial.
+---
+
+## এখান থেকে শুরু করো
+
+শুরু করো **Chapter 00: Kubernetes-এর ভিত্তি** দিয়ে। Kubernetes resource শেখার আগে আমরা বুঝব Kubernetes কোন operational problem সমাধান করতে তৈরি হয়েছে এবং পরবর্তী chapter-গুলোর জন্য প্রয়োজনীয় container foundation তৈরি করব।
