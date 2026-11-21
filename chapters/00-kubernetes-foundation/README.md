@@ -457,21 +457,28 @@ sequenceDiagram
     participant H as HPA
     participant D as Deployment
     participant RS as ReplicaSet
+    participant API as API Server
     participant S as Scheduler
     participant CA as Cluster Autoscaler
     participant A as AWS ASG
     participant N as New EC2 Node
+    participant K as Kubelet
 
-    U->>H: CPU metric indicates higher load
+    U->>H: Application load increases
     H->>D: Update desired replicas to 8
     D->>RS: Desired Pod count becomes 8
-    RS->>S: Pods are created and await placement
+    RS->>API: Create required Pod objects
+    API-->>S: Unscheduled Pods become visible
     S->>S: Evaluate eligible Nodes and capacity
-    S-->>CA: Some Pods are unschedulable
+    S->>API: Record scheduling failure for Pods with no fit
+    API-->>CA: Cluster Autoscaler observes unschedulable Pods
     CA->>A: Increase configured node group capacity
     A->>N: Launch EC2 instance
-    N-->>S: New Node registers in the cluster
-    S->>S: Assign eligible pending Pods to the new Node
+    N->>API: New Node registers in the cluster
+    API-->>S: New Node and pending Pods are visible
+    S->>API: Bind eligible pending Pods to the new Node
+    API-->>K: Kubelet observes assigned Pods
+    K->>K: Start the Pod containers
 ```
 
 Traffic পরে কমে গেলে HPA Pod replica কমাতে পারে। Node autoscaler-ও খালি বা কম ব্যবহৃত Node সরানোর চেষ্টা করতে পারে, যদি configuration ও safety condition তা অনুমোদন করে। ফলে application-এর Pod সংখ্যা এবং EC2 machine-এর সংখ্যা দুইটি আলাদা policy অনুযায়ী বাড়ে বা কমে।
