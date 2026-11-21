@@ -91,7 +91,7 @@ IP নোট করো। Pod recreate হলে IP বদলাতে পার
 ## 6. Container restart observe করো
 
 ```bash
-kubectl exec pod-explorer -c helper -- sh -c 'exit 1'
+kubectl exec pod-explorer -c helper -- sh -c 'exit 1' || true
 kubectl get pod pod-explorer
 kubectl get pod pod-explorer -o jsonpath='{.status.containerStatuses[*].name}' ; echo
 kubectl get pod pod-explorer -o jsonpath='{.status.containerStatuses[*].restartCount}' ; echo
