@@ -473,8 +473,9 @@ sequenceDiagram
     API->>MS: Forward aggregated metrics request
     MS-->>API: Return current Pod metrics
     API-->>H: Return metrics to HPA
-    H->>D: Update the Deployment scale target to 8 replicas
-    D->>RS: Desired Pod count becomes 8
+    H->>API: Update Deployment scale subresource to 8 replicas
+    API-->>D: Persist the new desired replica count
+    D->>RS: Update ReplicaSet desired Pod count
     RS->>API: Create required Pod objects
     API-->>S: Unscheduled Pods become visible
     S->>S: Evaluate eligible Nodes and capacity
