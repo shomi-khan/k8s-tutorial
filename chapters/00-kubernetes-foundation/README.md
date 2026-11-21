@@ -455,7 +455,7 @@ Traffic বেড়ে গেল:
 sequenceDiagram
     participant U as Users
     participant APP as Application Pods
-    participant M as Metrics API
+    participant MS as Metrics Server
     participant H as HPA
     participant D as Deployment
     participant RS as ReplicaSet
@@ -467,9 +467,10 @@ sequenceDiagram
     participant K as Kubelet
 
     U->>APP: Send more requests
-    APP-->>M: CPU usage metrics become available
-    H->>M: Read configured metrics
-    M-->>H: Return current CPU utilization
+    MS->>K: Collect Pod resource metrics
+    K-->>MS: Return CPU usage metrics
+    H->>MS: Read metrics through the Metrics API
+    MS-->>H: Return current CPU utilization
     H->>D: Update the Deployment scale target to 8 replicas
     D->>RS: Desired Pod count becomes 8
     RS->>API: Create required Pod objects
