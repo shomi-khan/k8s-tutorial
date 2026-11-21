@@ -446,16 +446,18 @@ Karpenter আরেকটি node autoscaling/provisioning tool। এটিও 
 - 2টি EC2 worker node আছে।
 - API application-এর 2টি Pod চলছে।
 
-Traffic বেড়ে গেল:
-1. Pod-এর CPU usage বেড়ে গেল।
-2. HPA metrics দেখে API-র desired replica 2 থেকে 8 করল।
-3. Kubernetes 6টি অতিরিক্ত Pod তৈরি করার চেষ্টা করল।
-4. Scheduler existing node-এ যতগুলো Pod চালানো সম্ভব, সেগুলো assign করল।
-5. জায়গা না থাকায় কিছু Pod Pending রইল।
-6. Cluster Autoscaler বুঝল আরও worker node দরকার।
-7. AWS ASG নতুন EC2 instance চালু করল।
-8. নতুন EC2 instance Kubernetes worker node হিসেবে যুক্ত হলো।
-9. Scheduler Pending Pod-গুলো নতুন node-এ assign করল।
+Traffic বেড়ে গেলে:
+1. Application-এর CPU usage বাড়ে।
+2. HPA metrics ও target utilization দেখে desired replica count 2 থেকে 8 করে।
+3. Deployment-এর desired replica count update হয়; ReplicaSet controller প্রয়োজনীয় Pod object তৈরি করে।
+4. Scheduler existing Node-গুলোতে Pod schedule করার চেষ্টা করে।
+5. যেসব Pod-এর জন্য উপযুক্ত capacity পাওয়া যায় না, সেগুলো Pending থাকে। তবে Pending হওয়ার কারণ capacity ছাড়াও scheduling constraint হতে পারে।
+6. Cluster Autoscaler API Server-এর মাধ্যমে unschedulable Pod পর্যবেক্ষণ করে এবং নতুন উপযুক্ত Node যোগ করলে Pod schedule করা সম্ভব হবে কি না যাচাই করে।
+7. উপযুক্ত হলে Cluster Autoscaler configured node group-এর capacity বাড়ায়।
+8. AWS ASG নতুন EC2 instance চালু করে।
+9. নতুন instance bootstrap process-এ kubelet চালু হয় এবং kubelet API Server-এর মাধ্যমে Node register করে।
+10. নতুন Node Ready ও eligible হলে Scheduler Pending Pod-গুলো সেখানে assign করতে পারে।
+11. Node-এর kubelet Pod specification দেখে Container Runtime-এর মাধ্যমে container তৈরি ও চালায়।
 
 ```mermaid
 sequenceDiagram
@@ -463,54 +465,70 @@ sequenceDiagram
     participant APP as Application Pods
     participant MS as Metrics Server
     participant H as HPA
-    participant D as Deployment
-    participant RS as ReplicaSet
     participant API as API Server
+    participant D as Deployment Controller
+    participant RS as ReplicaSet Controller
     participant S as Scheduler
     participant CA as Cluster Autoscaler
     participant A as AWS ASG
     participant N as New EC2 Node
     participant K as Kubelet
+    participant R as Container Runtime
 
     U->>APP: Send more requests
-    MS->>K: Periodically collect Pod resource metrics
-    K-->>MS: Return CPU usage metrics
-    H->>API: Query Pod metrics through metrics.k8s.io
+
+    MS->>K: Scrape resource metrics
+    K-->>MS: Return Pod resource metrics
+
+    H->>API: Query Pod metrics via metrics.k8s.io
     API->>MS: Forward aggregated metrics request
     MS-->>API: Return current Pod metrics
     API-->>H: Return metrics to HPA
-    H->>API: Update Deployment scale subresource to 8 replicas
-    API-->>D: Persist the new desired replica count
-    D->>RS: Update ReplicaSet desired Pod count
+
+    H->>API: Update Deployment scale subresource to 8
+    API->>API: Persist updated desired replica count
+
+    Note over D,API: Deployment Controller observes updated Deployment
+    D->>API: Update ReplicaSet desired replica count
+
+    Note over RS,API: ReplicaSet Controller observes updated ReplicaSet
     RS->>API: Create required Pod objects
-    API-->>S: Unscheduled Pods become visible
-    S->>S: Evaluate eligible Nodes and capacity
-    S->>API: Record scheduling failure for Pods with no fit
-    API-->>CA: Cluster Autoscaler observes unschedulable Pods
+
+    Note over S,API: Scheduler watches unscheduled Pods
+    S->>API: Record FailedScheduling for Pods with no fit
+
+    Note over CA,API: Cluster Autoscaler observes unschedulable Pods
     CA->>A: Increase configured node group capacity
+
     A->>N: Launch EC2 instance
-    N->>API: New Node registers in the cluster
-    API-->>S: New Node and pending Pods are visible
-    S->>API: Bind eligible pending Pods to the new Node
-    API-->>K: Kubelet observes assigned Pods
-    K->>K: Start the Pod containers
+    N->>K: Bootstrap kubelet
+    K->>API: Register Node
+
+    Note over S,API: Scheduler observes eligible Node and pending Pods
+    S->>API: Bind eligible Pending Pods to new Node
+
+    Note over K,API: Kubelet observes Pods assigned to its Node
+    K->>R: Create and start containers through CRI
+    R-->>K: Return runtime status
+    K->>API: Report Pod status
 ```
 
-Traffic কমে গেলে HPA Pod replica কমাতে পারে। Node autoscaler-ও configuration ও safety condition অনুমোদন করলে খালি বা কম ব্যবহৃত Node সরানোর চেষ্টা করতে পারে।
+Diagram-টি একটি conceptual sequence, internal implementation-এর exact timeline নয়। Kubernetes component-গুলো watch ও reconciliation loop-এর মাধ্যমে asynchronous ভাবে কাজ করে। Metrics Server kubelet থেকে resource metrics scrape করে; HPA metrics API দিয়ে metrics পায়। Controller, Scheduler ও Cluster Autoscaler API Server-এর state পর্যবেক্ষণ করে নিজেদের কাজ করে, সরাসরি notification chain ধরে নয়।
 
-অর্থাৎ, application-এর Pod সংখ্যা এবং EC2 machine-এর সংখ্যা দুটি আলাদা policy অনুযায়ী বাড়ে বা কমে।
+Traffic কমলে HPA desired Pod replica count কমাতে পারে। Node autoscaler configuration ও safety condition মিলে গেলে unused Node সরানোর চেষ্টা করতে পারে। Pod scaling এবং Node scaling দুটি আলাদা decision, policy এবং control loop।
 
-এই উদাহরণে HPA, Deployment, Scheduler, kubelet, Cluster Autoscaler এবং ASG-এর দায়িত্ব আলাদা:
+এই উদাহরণে component-গুলোর দায়িত্ব:
 
 | Component | মূল দায়িত্ব |
 |---|---|
-| Deployment | Application rollout পরিচালনা করে এবং ReplicaSet-এর মাধ্যমে কাঙ্ক্ষিত Pod replica count প্রকাশ করে |
-| ReplicaSet | নির্দিষ্ট সংখ্যক Pod replica বজায় রাখার চেষ্টা করে |
+| Deployment Controller | Deployment-এর desired state পর্যবেক্ষণ করে এবং ReplicaSet-এর state update করে |
+| ReplicaSet Controller | নির্দিষ্ট সংখ্যক Pod replica বজায় রাখার চেষ্টা করে |
 | HPA | Metrics ও policy দেখে scale target-এর desired replica count পরিবর্তন করে |
-| Scheduler | Pending Pod-এর জন্য উপযুক্ত বিদ্যমান Node নির্বাচন করা |
-| Kubelet | নিজের Node-এ Pod ও container-এর lifecycle পরিচালনা করা |
-| Cluster Autoscaler | নতুন Node যোগ করলে schedule হতে পারে এমন unschedulable Pod-এর জন্য node group capacity বাড়ানোর চেষ্টা করা |
-| AWS ASG | EC2 instance-এর সংখ্যা পরিচালনা করা |
+| Scheduler | Unscheduled Pod-এর জন্য উপযুক্ত Node নির্বাচন ও binding করে |
+| Kubelet | নিজের Node-এ Pod lifecycle পরিচালনা করে এবং Container Runtime-এর সঙ্গে কাজ করে |
+| Container Runtime | CRI-এর মাধ্যমে container তৈরি, চালানো ও runtime lifecycle পরিচালনা করে |
+| Cluster Autoscaler | নতুন Node যোগ করলে schedule হতে পারে এমন unschedulable Pod দেখে node group capacity বাড়ানোর চেষ্টা করে |
+| AWS ASG | EC2 instance-এর সংখ্যা পরিচালনা করে |
 
 ### 7.7 ASG বনাম Kubernetes: সংক্ষেপে
 
