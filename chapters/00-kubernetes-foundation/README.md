@@ -454,6 +454,7 @@ Traffic বেড়ে গেল:
 ```mermaid
 sequenceDiagram
     participant U as Users
+    participant M as Metrics API
     participant H as HPA
     participant D as Deployment
     participant RS as ReplicaSet
@@ -464,8 +465,10 @@ sequenceDiagram
     participant N as New EC2 Node
     participant K as Kubelet
 
-    U->>H: Application load increases
-    H->>D: Update desired replicas to 8
+    U->>U: Send more requests to the application
+    M->>H: Expose higher CPU utilization metrics
+    H->>M: Read configured metrics
+    H->>D: Update the Deployment scale target to 8 replicas
     D->>RS: Desired Pod count becomes 8
     RS->>API: Create required Pod objects
     API-->>S: Unscheduled Pods become visible
