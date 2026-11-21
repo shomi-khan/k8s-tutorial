@@ -188,7 +188,7 @@ Lab-এ Pod create/inspect, shared localhost network পরীক্ষা, cont
 - Multi-container Pod tightly coupled helper patterns-এর জন্য।
 
 ## Next Chapter
-**Chapter 03: Workloads: Deployment ও ReplicaSet**
+**[Chapter 03: Workloads: Deployment ও ReplicaSet](../03-workloads/README.md)**
 
 Pod-এর structure ও lifecycle বোঝার পর দেখব production-এ কেন Deployment/ReplicaSet ব্যবহার করা হয় এবং desired replica count কীভাবে বজায় থাকে।
 
