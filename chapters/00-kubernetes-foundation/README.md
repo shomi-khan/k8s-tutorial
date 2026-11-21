@@ -256,13 +256,11 @@ flowchart TD
 এখানে Process, Container, Pod এবং Node failure এক ঘটনা নয়:
 
 - **Application process crash:** Container-এর প্রধান process শেষ হয়ে যেতে পারে। Deployment-এর মতো workload-এ সাধারণত `restartPolicy: Always` থাকে, তাই kubelet একই Pod-এর container আবার চালু করার চেষ্টা করে।
-- **Container failure:** Container runtime container-টিকে restart করতে পারে; এতে Pod-টি একই থাকতে পারে।
+- **Container failure:** Pod-এর `restartPolicy` অনুযায়ী kubelet container-টিকে আবার চালু করার চেষ্টা করে; এতে Pod-টি একই থাকতে পারে।
 - **Pod failure বা deletion:** Pod আর recover করা সম্ভব না হলে Deployment-এর অধীনে থাকা ReplicaSet প্রয়োজন অনুযায়ী replacement Pod তৈরি করে। নতুন Pod পুরোনো Pod-এর একই object নয়; এটি নতুন Pod identity নিয়ে তৈরি হয়।
 - **Node failure:** পুরো Node unavailable হলে সেখানে থাকা Pod-গুলোও unavailable হয়। Node-এর অবস্থা শনাক্ত হওয়া, Pod-গুলোকে failed/evicted হিসেবে বিবেচনা করা এবং replacement তৈরি হওয়ার মধ্যে কিছু সময় লাগতে পারে। Workload controller তখন অন্য উপযুক্ত Node-এ replacement Pod চালানোর চেষ্টা করে।
 
 এই পার্থক্যগুলো মনে রাখলেই failure হলে Kubernetes ঠিক কী recover করছে, তা গুলিয়ে যাবে না। বিস্তারিত lifecycle পরের chapter-গুলোতে আসবে।
-
-এই behavior-এর details আমরা পরবর্তী chapter-গুলোতে খুলে দেখব।
 
 ---
 
