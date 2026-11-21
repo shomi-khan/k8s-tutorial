@@ -172,7 +172,7 @@ Container-গুলো চালানো সম্ভব, কিন্তু �
 
 | প্রশ্ন | আমাদের কী দরকার? |
 |---|---|
-| কোন machine-এ container চালাব? | Placement / scheduling |
+| কোন machine-এ container চালাব? | Scheduler-এর মাধ্যমে Pod placement / scheduling |
 | Container crash করলে? | Health detection ও recovery |
 | Instance সংখ্যা কীভাবে বজায় রাখব? | Desired-state management |
 | নতুন version deploy করব কীভাবে? | Controlled rollout |
@@ -184,6 +184,8 @@ Container-গুলো চালানো সম্ভব, কিন্তু �
 | Deployment ভুল হলে? | Rollback / recovery |
 
 এগুলো একেকটি feature নয় মাত্র। এগুলো একসঙ্গে কাজ করার মতো একটি management system-এর প্রয়োজন তৈরি করে।
+
+এখানে **scheduling** বলতে বোঝায়: কোনো নতুন Pod-কে cluster-এর কোন worker machine বা Node-এ চালানো হবে, সেই সিদ্ধান্ত। Kubernetes Scheduler বিদ্যমান Node-গুলোর capacity ও Pod-এর requirements দেখে এই সিদ্ধান্ত নেয়। Node-এ জায়গা না থাকলে Scheduler নিজে নতুন machine বানায় না; Pod Pending থাকতে পারে।
 
 ---
 
@@ -257,116 +259,244 @@ flowchart TD
 
 ## 7. “স্কেল করার জন্য AWS ASG আছে, Kubernetes কেন?”
 
-এটি খুব ভালো প্রশ্ন। Kubernetes শেখার আগে এই পার্থক্যটি পরিষ্কার হওয়া জরুরি।
+এখানে একটা গুরুত্বপূর্ণ প্রশ্ন আছে: AWS যদি নিজেই EC2 instance বাড়াতে ও কমাতে পারে, তাহলে Kubernetes আবার কী যোগ করছে?
 
-### Auto Scaling Group (ASG) কী করে?
+উত্তরটা বুঝতে হলে আগে application আর server-কে আলাদা করে দেখতে হবে।
 
-AWS Auto Scaling Group মূলত EC2 instance fleet-এর capacity পরিচালনা করে। তুমি minimum, desired এবং maximum instance সংখ্যা নির্ধারণ করতে পারো। Metrics বা scaling policy অনুযায়ী EC2 instance সংখ্যা বাড়াতে বা কমাতে পারে।
+### 7.1 আগে বুঝি: Pod আসলে কী?
 
-উদাহরণ:
+ধরো, তোমার একটি backend application আছে। Docker image থেকে application-টি চালালে একটি container তৈরি হয়।
 
-- Desired capacity = 2 EC2 instances
-- CPU utilization বাড়লে policy অনুযায়ী desired capacity বাড়ানো
-- প্রয়োজন হলে নতুন EC2 instance তৈরি
-- Capacity কম প্রয়োজন হলে instance কমানো
+Kubernetes-এ সাধারণত container-কে সরাসরি manage না করে **Pod** নামের একটি unit-এর মধ্যে চালানো হয়।
 
-ASG মূলত infrastructure-level scaling করে: **কতগুলো EC2 machine থাকবে?**
+সহজভাবে:
 
-### Kubernetes কী scale করে?
+- **Container:** তোমার application process এবং তার runtime environment।
+- **Pod:** Kubernetes-এর scheduling ও management-এর সবচেয়ে ছোট deployable unit। একটি Pod-এ এক বা একাধিক container থাকতে পারে। সাধারণ web API-র ক্ষেত্রে প্রায়ই একটি application container-ই থাকে।
+- **Replica:** একই application-এর একাধিক copy। যেমন 3টি replica মানে application-এর 3টি আলাদা Pod চালানো।
 
-Kubernetes-এর workload abstraction দিয়ে application-level workload পরিচালনা করা যায়। উদাহরণস্বরূপ, Deployment-এর অধীনে কতগুলো application Pod চলবে তা নির্ধারণ করা যায়।
-
-- 2টি application Pod থেকে 6টি Pod-এ scale করা।
-- Pod crash হলে replacement তৈরি করা।
-- Rolling update-এর মাধ্যমে application version পরিবর্তন করা।
-- Resource requests অনুযায়ী Pod-কে available nodes-এ schedule করা।
-- Service-এর মাধ্যমে Pod-গুলোর মধ্যে traffic distribute করা।
-
-Kubernetes-এর Horizontal Pod Autoscaler (HPA) metrics-এর ভিত্তিতে Pod replica সংখ্যা পরিবর্তন করতে পারে।
-
-### দুইটির scaling layer আলাদা
+ধরো, আমাদের API application-এর 3টি replica দরকার:
 
 ```mermaid
 flowchart TD
-    T[Incoming traffic / workload demand] --> H[Application scaling decision]
-    H --> P[More or fewer Pods]
-    P --> N{Enough node capacity?}
-    N -->|Yes| S[Schedule Pods on existing nodes]
-    N -->|No| CA[Node autoscaling mechanism]
-    CA --> EC[Add EC2 / cloud nodes]
-    EC --> S
+    D[Deployment: চাই 3টি replica] --> P1[Pod 1]
+    D --> P2[Pod 2]
+    D --> P3[Pod 3]
+    P1 --> C1[API container]
+    P2 --> C2[API container]
+    P3 --> C3[API container]
 ```
 
-একটি Pod বাড়ানো মানেই নতুন EC2 instance তৈরি করা নয়। আগে existing node-এ জায়গা আছে কিনা দেখা হয়। Capacity না থাকলে node-level autoscaling mechanism প্রয়োজন হতে পারে।
+অর্থাৎ, Kubernetes-কে আমরা বলছি: “আমার API application-এর 3টি copy চালু রাখো।” এই copy-গুলো Pod হিসেবে চলে।
 
-### ASG বনাম Kubernetes: তুলনা
+### 7.2 HPA কী করে?
 
-| Capability | AWS ASG | Kubernetes |
-|---|---|---|
-| Primary managed unit | EC2 instances | Kubernetes workloads (e.g., Pods) |
-| Scale application replicas | সরাসরি application Pod বোঝে না | Workload replicas বাড়ানো/কমানো যায় |
-| Scale machines | EC2 instance count পরিচালনা করে | Kubernetes নিজে cloud VM fleet autoscaling সব environment-এ নিশ্চিত করে না; Cluster Autoscaler/Karpenter বা cloud integration লাগতে পারে |
-| Failed application container recovery | Container-level application recovery ASG-এর মূল দায়িত্ব নয় | Workload controllers desired replicas বজায় রাখতে Pod replacement-এর চেষ্টা করে |
-| Placement | EC2 capacity ও instance-level policies | Pod resource requests, constraints, policies এবং available nodes অনুযায়ী scheduling |
-| Deployment rollout | ASG instance replacement/refresh-এর mechanism | Application rollout, readiness, rollout history ও rollback capabilities (workload resources/tooling অনুযায়ী) |
-| Service discovery | AWS infrastructure/networking features দিয়ে configure করতে হয় | Kubernetes Service ও DNS abstraction সরবরাহ করে |
-| Application resource declarations | EC2 instance configuration | CPU/memory requests/limits, replicas, probes, workload specs ইত্যাদি |
+**HPA-এর পূর্ণরূপ Horizontal Pod Autoscaler।** নামের মধ্যেই কাজের পরিচয় আছে:
 
-> **ASG এবং Kubernetes একে অপরের replacement নয়।** তারা ভিন্ন layer-এ কাজ করে, এবং AWS-এ Kubernetes cluster চালালে অনেক সময় দুটিই একসঙ্গে ব্যবহৃত হয়।
+- Horizontal: একই application-এর copy বাড়ানো বা কমানো।
+- Pod: Kubernetes-এ application চালানোর unit।
+- Autoscaler: নির্দিষ্ট metric দেখে replica সংখ্যা স্বয়ংক্রিয়ভাবে পরিবর্তন করে।
 
-### AWS-এ Kubernetes-এর একটি সাধারণ scaling arrangement
-
-একটি managed Kubernetes environment যেমন EKS-এ:
-
-- Kubernetes workload controller / HPA application Pod-এর সংখ্যা পরিবর্তন করতে পারে।
-- Scheduler available node-এ Pod বসানোর চেষ্টা করে।
-- Pod schedule করার মতো capacity না থাকলে node autoscaling solution নতুন node যোগ করতে পারে।
-- AWS infrastructure-এ node group-এর capacity EC2 instance দ্বারা সরবরাহ হয়; node autoscaler configuration অনুযায়ী managed node group/ASG capacity বাড়তে পারে, অথবা Karpenter-এর মতো tool node provision করতে পারে।
+ধরো, তোমার API-র 2টি Pod চলছে। তুমি HPA-কে এমন policy দিলে যে Pod-গুলোর গড় CPU usage নির্দিষ্ট target-এর চেয়ে বেশি হলে replica বাড়াতে হবে, আর কম থাকলে কমাতে হবে।
 
 ```mermaid
 flowchart TD
-    U[Traffic increases] --> HPA[HPA: adjust Pod replicas]
-    HPA --> P[More Pods requested]
+    M[Pod CPU metrics] --> H[HPA checks target]
+    H -->|Load is high| UP[Increase desired replicas]
+    H -->|Load is low| DOWN[Decrease desired replicas]
+    UP --> D[Deployment replica count]
+    DOWN --> D
+    D --> P[More or fewer API Pods]
+```
+
+একটি সরল উদাহরণ:
+
+| অবস্থা | API Pod-এর সংখ্যা |
+|---|---:|
+| স্বাভাবিক traffic | 2 |
+| Traffic বেড়েছে, CPU target ছাড়িয়েছে | 4 |
+| Traffic আরও বেড়েছে | 6 |
+| Traffic কমে গেছে | 2 |
+
+এটি বোঝানোর জন্য সরল উদাহরণ। বাস্তবে HPA নির্দিষ্ট সময়ের metrics, target utilization, minimum ও maximum replica এবং scaling behavior বিবেচনা করে। CPU ছাড়াও memory বা custom/external metric ব্যবহার করা যায়, উপযুক্ত metrics integration থাকলে।
+
+একটি গুরুত্বপূর্ণ বিষয়: **HPA নিজে নতুন server বা EC2 instance তৈরি করে না।** HPA শুধু Kubernetes-কে জানায়, “এই application-এর Pod replica এতগুলো হওয়া দরকার।”
+
+আর HPA কাজ করতে metrics সরবরাহকারী ব্যবস্থা প্রয়োজন। যেমন CPU/memory metrics-এর জন্য সাধারণত Metrics Server ব্যবহৃত হয়। HPA traffic-এর সংখ্যা নিজে থেকে জাদুর মতো জানে না; তাকে যে metric configure করা হয়েছে সেটির ওপর সিদ্ধান্ত নেয়।
+
+### 7.3 Scheduler কী? এর কাজ কী?
+
+এখন ধরো HPA বলল, 2টির বদলে 5টি Pod দরকার। Kubernetes 3টি নতুন Pod তৈরি করার চেষ্টা করল। কিন্তু Pod তৈরি করলেই তো সেগুলো কোনো machine-এ চলবে না। কোন machine-এ চলবে, সেটি ঠিক করতে হয়।
+
+এই কাজ করে **Kubernetes Scheduler**।
+
+Cluster-এ যে machine-গুলো Kubernetes-এর worker node হিসেবে যুক্ত আছে, সেগুলোর মধ্যে কোনটিতে নতুন Pod চালানো সম্ভব, Scheduler তা নির্বাচন করে।
+
+ধরো:
+
+- Node A-তে CPU ও memory-র পর্যাপ্ত জায়গা আছে।
+- Node B প্রায় পূর্ণ।
+- Node C-তে Pod চালানোর জন্য প্রয়োজনীয় memory নেই।
+
+Scheduler Pod-এর resource request এবং অন্যান্য scheduling requirement বিবেচনা করে উপযুক্ত node নির্বাচন করে।
+
+```mermaid
+flowchart TD
+    P[New Pod: এখনও কোনো Node-এ বসেনি] --> S[Kubernetes Scheduler]
+    S --> A[Node A: যথেষ্ট capacity]
+    S --> B[Node B: capacity কম]
+    S --> C[Node C: memory যথেষ্ট নয়]
+    A --> X[Pod assigned to Node A]
+```
+
+সহজ ভাষায়, Scheduler হলো cluster-এর **কোন Pod কোন worker machine-এ চলবে, সেই সিদ্ধান্ত নেওয়ার component**।
+
+Scheduler যা করে না:
+
+- নতুন EC2 instance তৈরি করে না।
+- নিজে application container চালায় না।
+- CPU বা memory বাড়িয়ে দেয় না।
+
+এটি শুধু উপযুক্ত বিদ্যমান node বেছে নেয়। নির্বাচিত node-এ Pod চালানোর কাজ করে সেই node-এর kubelet ও container runtime। এগুলো আমরা Architecture chapter-এ বিস্তারিত শিখব।
+
+### 7.4 তাহলে Pod-এর জন্য Node না থাকলে কী হয়?
+
+ধরো HPA 2টি থেকে 8টি Pod করতে বলেছে। কিন্তু বর্তমান EC2 machine-গুলোতে জায়গা আছে মাত্র 5টি Pod-এর।
+
+- 5টি Pod node-এ schedule হয়ে চলতে পারে।
+- বাকি 3টি Pod তৈরি হলেও কোনো node-এ জায়গা না থাকায় **Pending** অবস্থায় থাকবে।
+- Scheduler বারবার উপযুক্ত node খুঁজবে।
+- কিন্তু নতুন capacity না আসা পর্যন্ত সেগুলো চালু হতে পারবে না।
+
+এখানেই infrastructure scaling-এর প্রয়োজন।
+
+### 7.5 AWS ASG-এর সঙ্গে Kubernetes কীভাবে কাজ করে?
+
+এখন দুইটি আলাদা দায়িত্ব পাশাপাশি রাখি:
+
+1. **HPA:** Application-এর কতগুলো Pod দরকার, তা নির্ধারণ করে।
+2. **Node autoscaler:** Pod চালানোর মতো worker node কম থাকলে আরও machine যোগ করার ব্যবস্থা করে।
+
+AWS-এ এই node autoscaling করার একাধিক উপায় আছে। বহুল ব্যবহৃত একটি arrangement বোঝা যাক।
+
+#### ASG একা Kubernetes-এর Pod বোঝে না
+
+AWS Auto Scaling Group (ASG) EC2 instance-এর সংখ্যা বাড়াতে বা কমাতে পারে। কিন্তু ASG নিজে জানে না:
+
+- তোমার API-র কয়টি Pod দরকার,
+- কোন Pod Pending অবস্থায় আছে,
+- কোন worker node-এ CPU/memory-র জায়গা নেই।
+
+ASG-এর কাজ EC2 instance fleet পরিচালনা করা। Kubernetes-এর workload কী চায়, তা ASG-কে বোঝানোর জন্য মাঝখানে integration বা node autoscaling component লাগে।
+
+#### Cluster Autoscaler কীভাবে ASG-কে সাহায্য করে?
+
+ধরো, EKS cluster-এ worker node-গুলো একটি EC2 Auto Scaling Group বা EKS Managed Node Group দিয়ে তৈরি করা হয়েছে।
+
+Cluster Autoscaler cluster-এর অবস্থা দেখে। যদি কিছু Pod resource না থাকার কারণে schedule হতে না পারে, এটি বুঝতে পারে যে অতিরিক্ত node দরকার হতে পারে। উপযুক্ত node group-এর capacity বাড়ানোর জন্য এটি AWS-এর সঙ্গে কাজ করে। Node group-এর পেছনে ASG থাকলে ASG নতুন EC2 instance চালু করে।
+
+নতুন EC2 instance Kubernetes cluster-এ worker node হিসেবে যুক্ত হলে Scheduler আবার Pending Pod-গুলোর জন্য জায়গা খুঁজতে পারে।
+
+```mermaid
+flowchart TD
+    H[HPA: API-র 8টি Pod দরকার] --> P[8টি Pod তৈরি করার অনুরোধ]
     P --> S[Kubernetes Scheduler]
-    S -->|Existing capacity| N[Existing worker nodes]
-    S -->|Insufficient capacity| NA[Node autoscaler]
-    NA --> EC[New EC2 capacity]
-    EC --> N
-    N --> P
+    S -->|5টি Pod schedule হয়| N[Existing EC2 worker nodes]
+    S -->|3টি Pod Pending: জায়গা নেই| PA[Pending Pods]
+    PA --> CA[Cluster Autoscaler]
+    CA --> ASG[AWS Auto Scaling Group capacity বাড়ায়]
+    ASG --> EC2[নতুন EC2 instance চালু হয়]
+    EC2 --> JOIN[নতুন worker node cluster-এ যুক্ত হয়]
+    JOIN --> S
+    S --> RUN[বাকি Pod-গুলো schedule হয়ে চলে]
 ```
 
-এখানে দুই ধরনের scaling decision আছে:
+এই flow-তে ASG আর Kubernetes একই কাজ করছে না:
 
-1. **Workload scaling:** কতগুলো application replica চালানো দরকার?
-2. **Infrastructure scaling:** সেই replica চালানোর জন্য কতগুলো machine/capacity দরকার?
+- Kubernetes/HPA application-এর replica চাহিদা জানায়।
+- Scheduler দেখে Pod কোথায় চালানো সম্ভব।
+- Cluster Autoscaler বুঝতে সাহায্য করে যে আরও node দরকার।
+- ASG EC2 machine-এর সংখ্যা বাড়ায়।
+- নতুন machine cluster-এ যুক্ত হলে Scheduler সেখানে Pod বসায়।
 
-Kubernetes HPA workload replica scaling-এর জন্য ব্যবহৃত হয়। Node autoscaling-এর জন্য আলাদা mechanism প্রয়োজন। AWS-এ এই infrastructure layer ASG, managed node groups, Cluster Autoscaler, Karpenter ইত্যাদির মাধ্যমে integrate হতে পারে, setup অনুযায়ী।
+**অর্থাৎ, হ্যাঁ, Kubernetes-based system AWS-এ প্রয়োজন হলে ASG-এর মাধ্যমে EC2 instance বাড়াতে পারে। কিন্তু Kubernetes Scheduler বা HPA সরাসরি ASG-কে scale করে না। Cluster Autoscaler-এর মতো integration এই দুই layer-কে যুক্ত করে।**
 
-### তাহলে শুধু ASG দিয়েই কি application চালানো যায়?
+#### Karpenter কী?
+
+Karpenter আরেকটি node autoscaling/provisioning tool। এটিও Pending Pod-এর resource requirement দেখে নতুন worker node দরকার কিনা নির্ধারণ করতে পারে। তবে Cluster Autoscaler-এর মতো আগে থেকে নির্ধারিত ASG-এর desired capacity বাড়ানোর পথেই শুধু কাজ করে না। AWS-এ Karpenter প্রয়োজন অনুযায়ী EC2 instance provision করার জন্য AWS API ব্যবহার করতে পারে।
+
+এই chapter-এর জন্য শুধু পার্থক্যটি মনে রাখো:
+
+- **Cluster Autoscaler:** সাধারণত বিদ্যমান node group/ASG-এর capacity adjust করে।
+- **Karpenter:** প্রয়োজন অনুযায়ী উপযুক্ত EC2 instance বেছে নিয়ে সরাসরি provision করতে পারে।
+
+দুটিরই configuration, permission এবং infrastructure setup দরকার। এগুলো Kubernetes core-এর মধ্যে স্বয়ংক্রিয়ভাবে চালু থাকে না।
+
+### 7.6 দুই ধরনের scaling একসঙ্গে: সম্পূর্ণ উদাহরণ
+
+এবার পুরো বিষয়টি একটি উদাহরণে দেখি।
+
+শুরুতে:
+- 2টি EC2 worker node আছে।
+- API application-এর 2টি Pod চলছে।
+
+Traffic বেড়ে গেল:
+1. Pod-এর CPU usage বেড়ে গেল।
+2. HPA metrics দেখে API-র desired replica 2 থেকে 8 করল।
+3. Kubernetes 6টি অতিরিক্ত Pod তৈরি করার চেষ্টা করল।
+4. Scheduler existing node-এ যতগুলো Pod চালানো সম্ভব, সেগুলো assign করল।
+5. জায়গা না থাকায় কিছু Pod Pending রইল।
+6. Cluster Autoscaler বুঝল আরও worker node দরকার।
+7. AWS ASG নতুন EC2 instance চালু করল।
+8. নতুন EC2 instance Kubernetes worker node হিসেবে যুক্ত হলো।
+9. Scheduler Pending Pod-গুলো নতুন node-এ assign করল।
+
+```mermaid
+sequenceDiagram
+    participant U as Users
+    participant H as HPA
+    participant D as Deployment
+    participant S as Scheduler
+    participant CA as Cluster Autoscaler
+    participant A as AWS ASG
+    participant N as New EC2 Node
+
+    U->>H: Traffic / load increases
+    H->>D: Desired replicas = 8
+    D->>S: New Pods need placement
+    S->>S: Check available node capacity
+    S-->>CA: Some Pods cannot be scheduled
+    CA->>A: Increase node group capacity
+    A->>N: Launch EC2 instance
+    N-->>S: Node joins the cluster
+    S->>S: Assign pending Pods to the new node
+```
+
+Traffic পরে কমে গেলে HPA Pod replica কমাতে পারে। Node autoscaler-ও খালি বা কম ব্যবহৃত node সরানোর চেষ্টা করতে পারে, যদি configuration ও safety condition তা অনুমোদন করে। ফলে application-এর Pod সংখ্যা এবং EC2 machine-এর সংখ্যা দুইটি আলাদা policy অনুযায়ী বাড়ে বা কমে।
+
+### 7.7 ASG বনাম Kubernetes: সংক্ষেপে
+
+| প্রশ্ন | AWS ASG | Kubernetes ও সংশ্লিষ্ট component |
+|---|---|---|
+| Application-এর কয়টি copy চলবে? | সরাসরি Pod replica বোঝে না | Deployment replica নির্ধারণ করে; HPA metric অনুযায়ী replica বদলাতে পারে |
+| কোন machine-এ Pod চলবে? | Kubernetes Pod schedule করে না | Scheduler উপযুক্ত worker node নির্বাচন করে |
+| নতুন EC2 machine দরকার হলে? | EC2 instance launch/terminate করে | Cluster Autoscaler বা Karpenter-এর মতো node autoscaler প্রয়োজনীয় capacity চায় |
+| Application Pod crash করলে? | সাধারণত container-level recovery ASG-এর কাজ নয় | Workload controller replacement Pod তৈরি করার চেষ্টা করে |
+| Application update কীভাবে হবে? | EC2 instance refresh-এর mechanism আছে | Kubernetes Deployment rolling update পরিচালনা করতে পারে |
+
+> **ASG ও Kubernetes একে অপরের replacement নয়।** ASG machine পরিচালনা করে; Kubernetes application workload পরিচালনা করে। Node autoscaler এই দুই layer-এর মধ্যে সংযোগ তৈরি করে।
+
+### 7.8 তাহলে শুধু ASG দিয়েই কি application চালানো যায়?
 
 হ্যাঁ। Kubernetes সব application-এর জন্য বাধ্যতামূলক নয়।
 
-তোমার application যদি:
+Application ছোট ও সহজ হলে, কয়েকটি EC2 instance-এ deploy করা হলে এবং deployment/recovery/scaling automation সহজে পরিচালনা করা গেলে ASG + Load Balancer + deployment automation যথেষ্ট হতে পারে।
 
-- ছোট ও সহজ হয়,
-- কয়েকটি EC2 instance-এ deploy করা হয়,
-- deployment/recovery/scaling automation সহজ হয়,
-- operations team নিজস্ব scripts বা AWS services দিয়ে workflow সামলাতে পারে,
+Kubernetes-এর মূল্য বাড়ে যখন অনেক containerized workload পরিচালনা করতে হয় এবং scheduling, health, rollout, service discovery, configuration, resource management ও application-level scaling-এর জন্য একটি consistent platform দরকার হয়।
 
-তাহলে ASG + Load Balancer + deployment automation যথেষ্ট হতে পারে।
+তবে Kubernetes নিজেও complexity নিয়ে আসে: cluster পরিচালনা, networking, storage, security, upgrades, observability এবং troubleshooting শিখতে ও maintain করতে হয়। ছোট application-এর জন্য এটি অতিরিক্ত operational burden হতে পারে।
 
-Kubernetes-এর মূল্য বাড়ে যখন containerized workload পরিচালনার complexity বাড়ে, যেমন:
-
-- অনেক service ও workload পরিচালনা করা,
-- workload-গুলো বিভিন্ন node-এ schedule করা,
-- application replicas ও infrastructure capacity আলাদা করে manage করা,
-- standard deployment এবং rollback workflow দরকার,
-- health, configuration, networking ও resource management এক platform-এ প্রকাশ করা,
-- বিভিন্ন infrastructure/environment-এ একই Kubernetes API ও workload model ব্যবহার করা।
-
-তবে Kubernetes নিজেও complexity নিয়ে আসে: cluster পরিচালনা, networking, storage, security, upgrades, observability এবং troubleshooting শিখতে ও maintain করতে হয়। ছোট application-এর জন্য Kubernetes অতিরিক্ত operational burden হতে পারে।
-
-**Kubernetes ব্যবহার করলেই খরচ কমবে বা system সহজ হবে, এমন নিশ্চয়তা নেই।** এটি অনেক operational কাজকে একটি platform ও API-তে সংগঠিত করে, কিন্তু platform-এর দায়িত্বও তৈরি করে।
+**Kubernetes ব্যবহার করলেই খরচ কমবে বা system সহজ হবে, এমন নিশ্চয়তা নেই।** এটি অনেক operational কাজকে একটি platform ও API-তে সংগঠিত করে, কিন্তু platform পরিচালনার দায়িত্বও তৈরি করে।
 
 ---
 
