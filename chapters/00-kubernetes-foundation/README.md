@@ -467,10 +467,12 @@ sequenceDiagram
     participant K as Kubelet
 
     U->>APP: Send more requests
-    MS->>K: Collect Pod resource metrics
+    MS->>K: Periodically collect Pod resource metrics
     K-->>MS: Return CPU usage metrics
-    H->>MS: Read metrics through the Metrics API
-    MS-->>H: Return current CPU utilization
+    H->>API: Query Pod metrics through metrics.k8s.io
+    API->>MS: Forward aggregated metrics request
+    MS-->>API: Return current Pod metrics
+    API-->>H: Return metrics to HPA
     H->>D: Update the Deployment scale target to 8 replicas
     D->>RS: Desired Pod count becomes 8
     RS->>API: Create required Pod objects
