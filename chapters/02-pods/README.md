@@ -56,7 +56,7 @@ flowchart TD
   P --> ST[status: observed state]
 ```
 
-Pod create request accepted হওয়া মানেই container ready নয়। Pod Pending হতে পারে, image pull fail হতে পারে, process crash করতে পারে বা readiness condition পূরণ নাও হতে পারে।
+Pod create request accepted হওয়া মানেই container ready নয়। Pod Pending হতে পারে, image pull fail হতে পারে, process crash করতে পারে বা readiness condition পূরণ নাও হতে পারে। Pod phase কেবল high-level summary; Pod-এর `Ready` condition এবং container status দেখে আরও নির্দিষ্ট অবস্থা বোঝা যায়। `Running` phase মানেই traffic serve করার জন্য ready, এমন নয়।
 
 ## 4. Pod তৈরি হলে কী ঘটে?
 
@@ -122,7 +122,7 @@ Pod disposable resource। Pod phase হলো state-এর সংক্ষি�
 | Phase | Meaning |
 |---|---|
 | Pending | Accepted, কিন্তু scheduling/setup সম্পূর্ণ নয় |
-| Running | Node-এ assigned; container running বা starting থাকতে পারে |
+| Running | Node-এ bound; সব container তৈরি হয়েছে এবং অন্তত একটি running বা starting/restarting অবস্থায় আছে |
 | Succeeded | সব container সফলভাবে শেষ |
 | Failed | সব container শেষ, অন্তত একটি failure-এ |
 | Unknown | State নির্ভরযোগ্যভাবে জানা যাচ্ছে না |
@@ -150,7 +150,7 @@ Deployment-এর সাধারণ default `Always`। Restart policy Pod-এ�
 
 Container-এর CPU ও memory request/limit configure করা যায়।
 
-- **Request:** Scheduler-এর placement ও resource reservation-এর ভিত্তি।
+- **Request:** Scheduler-এর placement decision এবং resource accounting-এর ভিত্তি।
 - **Limit:** Runtime constraint; CPU limit throttling করতে পারে, memory limit অতিক্রম করলে OOM kill হতে পারে।
 
 Pod-এর resource calculation এবং scheduling details Chapter 07-এ দেখব।
@@ -195,5 +195,5 @@ Pod-এর structure ও lifecycle বোঝার পর দেখব productio
 ## Further Reading
 - [Kubernetes: Pods](https://kubernetes.io/docs/concepts/workloads/pods/)
 - [Kubernetes: Pod Lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/)
-- [Kubernetes: Multi-container Pods](https://kubernetes.io/docs/concepts/workloads/pods/)
+- [Kubernetes: Multi-container Pods](https://kubernetes.io/docs/concepts/workloads/pods/#pod-sharing-and-communication)
 - [Kubernetes: Container Runtime](https://kubernetes.io/docs/concepts/containers/)
