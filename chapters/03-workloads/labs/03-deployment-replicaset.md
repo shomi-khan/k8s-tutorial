@@ -23,8 +23,6 @@ Lab-এর directory-তে একটি file তৈরি করো:
 
 ```bash
 cat > workload-lab.yaml <<'EOF'
-
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
