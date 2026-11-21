@@ -419,7 +419,7 @@ Lab শেষে তুমি:
 
 ## Next Chapter
 
-**Chapter 02: Pods**
+**[Chapter 02: Pods](../02-pods/README.md)**
 
 এখন আমরা জানি Kubernetes Cluster-এর component-গুলো কোথায় থাকে এবং কী দায়িত্ব পালন করে। পরবর্তী chapter-এ এই architecture-এর সবচেয়ে মৌলিক workload unit, **Pod**, কেন আছে, কীভাবে গঠিত এবং তার lifecycle কীভাবে কাজ করে, তা হাতে-কলমে দেখব।
 
