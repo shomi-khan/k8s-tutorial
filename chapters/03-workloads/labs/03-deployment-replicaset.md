@@ -17,9 +17,14 @@ Local Kind context নিশ্চিত করো।
 
 ## 2. Deployment manifest তৈরি
 
-`workload-lab.yaml` ফাইলে:
 
-```yaml
+Lab-এর directory-তে একটি file তৈরি করো:
+
+
+```bash
+cat > workload-lab.yaml <<'EOF'
+
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -53,9 +58,10 @@ spec:
             limits:
               cpu: 200m
               memory: 128Mi
+EOF
 ```
 
-Apply এবং observe:
+Manifest review করে তারপর Apply এবং observe:
 
 ```bash
 kubectl apply -f workload-lab.yaml
@@ -89,7 +95,7 @@ kubectl get pods -l app=workload-lab -o jsonpath='{range .items[*]}{.metadata.na
 kubectl get pods -l app=workload-lab
 ```
 
-একটি Pod delete করো (নিচের command-এ actual Pod name বসাও):
+একটি Pod delete করো (নিচের command-এ actual Pod name বসাও)। নিশ্চিত হও নামটি `workload-lab` label-এর Pod থেকেই নেওয়া:
 
 ```bash
 kubectl delete pod <pod-name>
@@ -160,7 +166,7 @@ kubectl get events --sort-by=.metadata.creationTimestamp
 kubectl delete deployment workload-lab
 ```
 
-Deployment delete হলে তার managed ReplicaSet ও Pods-ও সাধারণত cascading deletion-এ delete হবে। Verify:
+Deployment delete হলে তার managed ReplicaSet ও Pods cascading deletion-এ delete হওয়ার কথা। Verify:
 
 ```bash
 kubectl get deployment,rs,pods -l app=workload-lab
