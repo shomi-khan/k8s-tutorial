@@ -2,7 +2,7 @@
 
 এই lab-এ Deployment তৈরি করে Deployment → ReplicaSet → Pod relationship observe করব। তারপর Pod delete, scale, image update ও rollback করে controller behavior দেখব।
 
-> **Safety:** নিজের local Kind cluster ব্যবহার করো। Active context নিশ্চিত করো। Cleanup শুধু এই lab-এর `workload-lab` Deployment delete করবে।
+**Safety:** কেবল নিজের disposable Kind cluster-এ চালাও। Active context যাচাই করো; context name `kind-...` না হলে lab-এর command চালিও না। Cleanup এই lab-এর `workload-lab` Deployment-এ scoped।
 
 [← Chapter 03: Workloads](../README.md)
 
